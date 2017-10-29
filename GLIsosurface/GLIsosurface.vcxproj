@@ -141,18 +141,30 @@
     <ClCompile Include="Core.c" />
     <ClCompile Include="DebugScene.c" />
     <ClCompile Include="Entry.c" />
+    <ClCompile Include="Hexahedron.c" />
+    <ClCompile Include="MemoryPool.c" />
     <ClCompile Include="OpenSimplexNoise.c" />
     <ClCompile Include="Sampler.c" />
+    <ClCompile Include="Tetrahedron.c" />
+    <ClCompile Include="THierarchy.c" />
     <ClCompile Include="UniformMarchingCubes.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
+    <ClInclude Include="DebugHeader.h" />
     <ClInclude Include="DebugScene.h" />
     <ClInclude Include="Core.h" />
+    <ClInclude Include="Hashmap.h" />
+    <ClInclude Include="Hexahedron.h" />
     <ClInclude Include="MCTable.h" />
     <ClInclude Include="MortonCoding.h" />
     <ClInclude Include="OpenSimplexNoise.h" />
+    <ClInclude Include="Options.h" />
     <ClInclude Include="Sampler.h" />
+    <ClInclude Include="Tetrahedron.h" />
+    <ClInclude Include="TetrahedronTable.h" />
+    <ClInclude Include="THierarchy.h" />
+    <ClInclude Include="MemoryPool.h" />
     <ClInclude Include="UniformMarchingCubes.h" />
     <ClInclude Include="Util.h" />
     <ClInclude Include="VoxelScene.h" />

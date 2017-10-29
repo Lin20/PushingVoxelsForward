@@ -7,6 +7,7 @@
 
 #include "Camera.h"
 #include "UniformMarchingCubes.h"
+#include "THierarchy.h"
 
 struct DebugScene
 {
@@ -20,12 +21,21 @@ struct DebugScene
 	GLuint fragment_shader;
 	GLuint shader_program;
 
+	GLuint outline_vs;
+	GLuint outline_fs;
+	GLuint outline_sp;
+
 	GLuint shader_projection;
 	GLuint shader_view;
 	GLuint shader_mul_clr;
 
+	GLuint outline_shader_projection;
+	GLuint outline_shader_view;
+	GLuint outline_shader_mul_clr;
+
 	struct FPSCamera camera;
 	struct UMC_Chunk test_chunk;
+	struct THierarchy hierarchy;
 };
 
 int DebugScene_init(struct DebugScene* out, struct RenderInput* render_input);

@@ -8,6 +8,8 @@ const float RotationSpeed = 0.001f;
 
 void FPSCamera_init(struct FPSCamera* camera, uint32_t width, uint32_t height, GLuint shader_proj, GLuint shader_view, struct RenderInput* render_input)
 {
+	camera->last_1 = 0;
+	camera->last_2 = 0;
 	camera->speed = 0.1f;
 	vec3_set(camera->position, 0, 0, -3);
 	vec3_set(camera->rot, 0, 0, 0);
@@ -28,6 +30,13 @@ void FPSCamera_update(struct FPSCamera* camera, struct RenderInput* render_input
 	/*float percent = 1.0f - fmaxf(0.0f, render_input->delta / UPDATE_UNITS);
 	float speed = camera->speed * render_input->delta * UPDATE_UNITS;
 	float delta_smoothness = Smoothness + (1.0f - Smoothness) * percent;*/
+
+	if (glfwGetKey(render_input->window, GLFW_KEY_1) && !camera->last_1)
+		camera->speed *= 2.0f;
+	if (glfwGetKey(render_input->window, GLFW_KEY_2) && !camera->last_2)
+		camera->speed *= 0.5f;
+	camera->last_1 = glfwGetKey(render_input->window, GLFW_KEY_1);
+	camera->last_2 = glfwGetKey(render_input->window, GLFW_KEY_2);
 
 	float speed = camera->speed;
 	float delta_smoothness = Smoothness;

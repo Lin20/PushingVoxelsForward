@@ -5,17 +5,17 @@
 // IMPORTANT! Do not change MCD* to anything other than a 32-bit int!
 // Performance drops SIGNIFICANTLY even if the whole table can fit in one word!
 
-const uint32_t MCDX[] = { 0, 1, 1, 0, 0, 1, 1, 0 };
-const uint32_t MCDY[] = { 0, 0, 0, 0, 1, 1, 1, 1 };
-const uint32_t MCDZ[] = { 0, 0, 1, 1, 0, 0, 1, 1 };
+static const uint32_t MCDX[] = { 0, 1, 1, 0, 0, 1, 1, 0 };
+static const uint32_t MCDY[] = { 0, 0, 0, 0, 1, 1, 1, 1 };
+static const uint32_t MCDZ[] = { 0, 0, 1, 1, 0, 0, 1, 1 };
 
-const uint32_t PEMMCDX[] = { 0, 1, 0, 1, 0, 1, 0, 1 };
-const uint32_t PEMMCDY[] = { 0, 0, 1, 1, 0, 0, 1, 1 };
-const uint32_t PEMMCDZ[] = { 0, 0, 0, 0, 1, 1, 1, 1 };
-const uint32_t PEMMCDVALUE = 0x11635F;
-const uint32_t PEMMCDELTA[] = { 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0 };
+static const uint32_t PEMMCDX[] = { 0, 1, 0, 1, 0, 1, 0, 1 };
+static const uint32_t PEMMCDY[] = { 0, 0, 1, 1, 0, 0, 1, 1 };
+static const uint32_t PEMMCDZ[] = { 0, 0, 0, 0, 1, 1, 1, 1 };
+static const uint32_t PEMMCDVALUE = 0x11635F;
+static const uint32_t PEMMCDELTA[] = { 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0 };
 
-const uint64_t MCTable_compressed[256] =
+static const uint64_t MCTable_compressed[256] =
 {
 	0xFFFFFFFFFFFFFFFF,
 	0xFFFFFFFFFFFFF380,
@@ -275,7 +275,7 @@ const uint64_t MCTable_compressed[256] =
 	0xFFFFFFFFFFFFFFFF
 };
 
-const int MCTable[][16] =
+static const int MCTable[][16] =
 {
 	{ -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
 	{ 0, 8, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
@@ -535,7 +535,7 @@ const int MCTable[][16] =
 	{ -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 }
 };
 
-const int MCPEM_Table[][20] =
+static const int MCPEM_Table[][20] =
 {
 	{ 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
 	{ 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },

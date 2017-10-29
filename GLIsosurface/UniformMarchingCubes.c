@@ -7,6 +7,8 @@
 #include "Util.h"
 #include "MCTable.h"
 #include "MortonCoding.h"
+#include "DebugHeader.h"
+#include "Options.h"
 
 #define INDEX3D(x,y,z,d) ((x) * (d) * (d) + (y) * (d) + (z))
 #define ISOLEVEL 0.0f
@@ -52,7 +54,7 @@ if (e.grid_v0 != e.grid_v1) \
 
 typedef uint32_t COORD_TYPE;
 
-const float(*sampler_fn)(float x, float y, float z, float w, struct osn_context* osn) = &SurfaceFn_sphere_r;
+const float(*sampler_fn)(float x, float y, float z, float w, struct osn_context* osn) = &SurfaceFn_sphere;
 
 void UMC_Chunk_init(struct UMC_Chunk* dest, uint32_t dim, int index_primitives, int use_pem)
 {
@@ -76,17 +78,12 @@ void UMC_Chunk_init(struct UMC_Chunk* dest, uint32_t dim, int index_primitives, 
 	dest->grid_verts = 0;
 	dest->edges = 0;
 
-	open_simplex_noise(77374, &dest->osn);
+	dest->osn = 0;
 
-	uint32_t dimp1 = dim + 1;
-	uint32_t dimp1_h = dimp1 / 2;
-	dest->grid_signs = malloc(dimp1_h * dimp1_h * dimp1_h * sizeof(uint16_t));
-	dest->grid_verts = malloc(dimp1 * dimp1 * dimp1 * sizeof(struct UMC_Isovertex));
-	dest->edges = malloc(dimp1 * dimp1 * dimp1 * 3 * sizeof(struct UMC_Edge));
-	dest->edge_v_indexes = malloc(dimp1 * dimp1 * dimp1 * 3 * sizeof(uint32_t));
-	memset(dest->grid_signs, 0, dimp1_h * dimp1_h * dimp1_h * sizeof(uint16_t));
-	memset(dest->edges, 0, dimp1 * dimp1 * dimp1 * sizeof(struct UMC_Edge));
-	memset(dest->edge_v_indexes, 0, dimp1 * dimp1 * dimp1 * 3 * sizeof(uint32_t));
+	dest->grid_signs = 0;
+	dest->grid_verts = 0;
+	dest->edges = 0;
+	dest->edge_v_indexes = 0;
 }
 
 void UMC_Chunk_destroy(struct UMC_Chunk* chunk)
@@ -104,17 +101,32 @@ void UMC_Chunk_destroy(struct UMC_Chunk* chunk)
 	}
 }
 
-void UMC_Chunk_run(struct UMC_Chunk* chunk)
+void UMC_Chunk_run(struct UMC_Chunk* chunk, vec3* corner_verts, int silent)
 {
 	assert(chunk);
 	double total_ms = 0;
 	double temp = 0;
 
-	printf("Running MC on chunk.\n--dim: %i\n--indexed: %s\n--pem: %s\n", chunk->dim, BOOL_TO_STRING(chunk->indexed_primitives), BOOL_TO_STRING(chunk->pem));
+	if (!silent)
+		printf("Running MC on chunk.\n--dim: %i\n--indexed: %s\n--pem: %s\n", chunk->dim, BOOL_TO_STRING(chunk->indexed_primitives), BOOL_TO_STRING(chunk->pem));
 
-	if (chunk->initialized)
+	if (!chunk->initialized)
 	{
-		printf("-Reset chunk...");
+		open_simplex_noise(77374, &chunk->osn);
+		uint32_t dimp1 = chunk->dim + 1;
+		uint32_t dimp1_h = dimp1 / 2;
+		chunk->grid_signs = malloc(dimp1_h * dimp1_h * dimp1_h * sizeof(uint16_t));
+		chunk->grid_verts = malloc(dimp1 * dimp1 * dimp1 * sizeof(struct UMC_Isovertex));
+		chunk->edges = malloc(dimp1 * dimp1 * dimp1 * 3 * sizeof(struct UMC_Edge));
+		chunk->edge_v_indexes = malloc(dimp1 * dimp1 * dimp1 * 3 * sizeof(uint32_t));
+		memset(chunk->grid_signs, 0, dimp1_h * dimp1_h * dimp1_h * sizeof(uint16_t));
+		memset(chunk->edges, 0, dimp1 * dimp1 * dimp1 * sizeof(struct UMC_Edge));
+		memset(chunk->edge_v_indexes, 0, dimp1 * dimp1 * dimp1 * 3 * sizeof(uint32_t));
+	}
+	else
+	{
+		if (!silent)
+			printf("-Reset chunk...");
 		clock_t start_clock = clock();
 		uint32_t dimp1 = chunk->dim + 1;
 		uint32_t dimp1_h = dimp1 / 2;
@@ -122,46 +134,53 @@ void UMC_Chunk_run(struct UMC_Chunk* chunk)
 		memset(chunk->edges, 0, dimp1 * dimp1 * dimp1 * 3 * sizeof(struct UMC_Edge));
 		memset(chunk->edge_v_indexes, 0, dimp1 * dimp1 * dimp1 * 3 * sizeof(uint32_t));
 		total_ms += clock() - start_clock;
-		printf("done (%i ms)\n", (int)(total_ms / (double)CLOCKS_PER_SEC * 1000.0));
+		if (!silent)
+			printf("done (%i ms)\n", (int)(total_ms / (double)CLOCKS_PER_SEC * 1000.0));
 	}
 
 
-	printf("-Label grid...");
+	if (!silent)
+		printf("-Label grid...");
 	clock_t start_clock = clock();
-	_UMC_Chunk_label_grid(chunk);
+	_UMC_Chunk_label_grid(chunk, corner_verts);
 	temp = clock() - start_clock;
 	total_ms += temp;
-	printf("done (%i ms)\n-Label edges...", (int)(temp / (double)CLOCKS_PER_SEC * 1000.0));
+	if (!silent)
+		printf("done (%i ms)\n-Label edges...", (int)(temp / (double)CLOCKS_PER_SEC * 1000.0));
 
 	start_clock = clock();
-	if (!_UMC_Chunk_label_edges(chunk))
+	if (!_UMC_Chunk_label_edges(chunk, silent))
 	{
-		printf("done.\nNo edge crossings detected. Early abandon.\n");
+		if (!silent)
+			printf("done.\nNo edge crossings detected. Early abandon.\n");
 	}
 	else
 	{
 		temp = clock() - start_clock;
 		total_ms += temp;
-		printf("done (%i ms)\n-Polygonize...", (int)(temp / (double)CLOCKS_PER_SEC * 1000.0));
+		if (!silent)
+			printf("done (%i ms)\n-Polygonize...", (int)(temp / (double)CLOCKS_PER_SEC * 1000.0));
 
 		start_clock = clock();
 		_UMC_Chunk_polygonize(chunk);
 		temp = clock() - start_clock;
 		total_ms += temp;
-		printf("done (%i ms)\n-Create VAO...", (int)(temp / (double)CLOCKS_PER_SEC * 1000.0));
+		if (!silent)
+			printf("done (%i ms)\n-Create VAO...", (int)(temp / (double)CLOCKS_PER_SEC * 1000.0));
 
 		start_clock = clock();
 		_UMC_Chunk_create_VAO(chunk);
 		temp = clock() - start_clock;
 		total_ms += temp;
 
-		printf("done (%i ms)\nComplete in %i ms. %i verts, %i prims (%i snapped).\n\n", (int)(temp / (double)CLOCKS_PER_SEC * 1000.0), (int)(total_ms / (double)CLOCKS_PER_SEC * 1000.0), chunk->v_count, chunk->p_count / 3, chunk->snapped_count);
+		if (!silent)
+			printf("done (%i ms)\nComplete in %i ms. %i verts, %i prims (%i snapped).\n\n", (int)(temp / (double)CLOCKS_PER_SEC * 1000.0), (int)(total_ms / (double)CLOCKS_PER_SEC * 1000.0), chunk->v_count, chunk->p_count / 3, chunk->snapped_count);
 
 		chunk->initialized = 1;
 	}
 }
 
-void _UMC_Chunk_label_grid(struct UMC_Chunk* chunk)
+void _UMC_Chunk_label_grid(struct UMC_Chunk* chunk, vec3* corner_verts)
 {
 	assert(chunk);
 	assert(chunk->grid_verts);
@@ -176,47 +195,102 @@ void _UMC_Chunk_label_grid(struct UMC_Chunk* chunk)
 	float w = chunk->timer;
 	struct osn_context* osn = chunk->osn;
 
-	for (uint32_t x = 0; x < dim; x++)
+	if (!corner_verts)
 	{
-		fx = (float)x - (float)(dim / 2);
-		for (uint32_t y = 0; y < dim; y++)
+		for (uint32_t x = 0; x < dim; x++)
 		{
-			fy = (float)y - (float)(dim / 2);
-			for (uint32_t z = 0; z < dim; z++)
+			fx = (float)x - (float)(dim / 2);
+			for (uint32_t y = 0; y < dim; y++)
 			{
-				fz = (float)z - (float)(dim / 2);
-				s = sampler_fn(fx, fy, fz, w, osn);
-				v = &grid_verts[INDEX3D(x, y, z, dim)];
-				v->value = s;
-				v->index = -1;
-				vec3_set(v->position, fx, fy, fz);
-				if (!pem)
+				fy = (float)y - (float)(dim / 2);
+				for (uint32_t z = 0; z < dim; z++)
 				{
-					if (s < ISOLEVEL)
+					fz = (float)z - (float)(dim / 2);
+					s = sampler_fn(fx, fy, fz, w, osn);
+					v = &grid_verts[INDEX3D(x, y, z, dim)];
+					v->value = s;
+					v->index = -1;
+					vec3_set(v->position, fx, fy, fz);
+					if (!pem)
 					{
-						uint32_t lsh = (((z & 1) * 1) + ((y & 1) * 2) + ((x & 1) * 4));
-						uint32_t mask = 1 << lsh;
-						grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim / 2)] |= mask;
+						if (s < ISOLEVEL)
+						{
+							uint32_t lsh = (((z & 1) * 1) + ((y & 1) * 2) + ((x & 1) * 4));
+							uint32_t mask = 1 << lsh;
+							grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim / 2)] |= mask;
+						}
+					}
+					else
+					{
+						uint32_t lsh = (((z & 1) * 1) + ((y & 1) * 2) + ((x & 1) * 4)) * 2;
+						assert(((grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim / 2)] >> lsh) & 3) == 0);
+						if (s < ISOLEVEL) // 0
+						{
+							uint32_t mask = 1 << lsh;
+							grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim / 2)] &= ~mask;
+						}
+						else if (s == ISOLEVEL) // 1
+						{
+							uint32_t mask = 1 << lsh;
+							grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim / 2)] |= mask;
+						}
+						else if (s > ISOLEVEL) // 2
+						{
+							uint32_t mask = 2 << lsh;
+							grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim / 2)] |= mask;
+						}
 					}
 				}
-				else
+			}
+		}
+	}
+	else
+	{
+		float f_delta = 1.0f / (float)(chunk->dim);
+		vec3 interpolated_point;
+		for (uint32_t x = 0; x < dim; x++)
+		{
+			fx = (float)x * f_delta;
+			for (uint32_t y = 0; y < dim; y++)
+			{
+				fy = (float)y * f_delta;
+				for (uint32_t z = 0; z < dim; z++)
 				{
-					uint32_t lsh = (((z & 1) * 1) + ((y & 1) * 2) + ((x & 1) * 4)) * 2;
-					assert(((grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim / 2)] >> lsh) & 3) == 0);
-					if (s < ISOLEVEL) // 0
+					fz = (float)z * f_delta;
+					_UMC_Chunk_trilerp(fx, fy, fz, corner_verts, interpolated_point);
+					s = sampler_fn(interpolated_point[0], interpolated_point[1], interpolated_point[2], w, osn);
+					v = &grid_verts[INDEX3D(x, y, z, dim)];
+					v->value = s;
+					v->index = -1;
+					vec3_set(v->position, interpolated_point[0], interpolated_point[1], interpolated_point[2]);
+					if (!pem)
 					{
-						uint32_t mask = 1 << lsh;
-						grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim / 2)] &= ~mask;
+						if (s < ISOLEVEL)
+						{
+							uint32_t lsh = (((z & 1) * 1) + ((y & 1) * 2) + ((x & 1) * 4));
+							uint32_t mask = 1 << lsh;
+							grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim / 2)] |= mask;
+						}
 					}
-					else if (s == ISOLEVEL) // 1
+					else
 					{
-						uint32_t mask = 1 << lsh;
-						grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim / 2)] |= mask;
-					}
-					else if (s > ISOLEVEL) // 2
-					{
-						uint32_t mask = 2 << lsh;
-						grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim / 2)] |= mask;
+						uint32_t lsh = (((z & 1) * 1) + ((y & 1) * 2) + ((x & 1) * 4)) * 2;
+						assert(((grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim / 2)] >> lsh) & 3) == 0);
+						if (s < ISOLEVEL) // 0
+						{
+							uint32_t mask = 1 << lsh;
+							grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim / 2)] &= ~mask;
+						}
+						else if (s == ISOLEVEL) // 1
+						{
+							uint32_t mask = 1 << lsh;
+							grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim / 2)] |= mask;
+						}
+						else if (s > ISOLEVEL) // 2
+						{
+							uint32_t mask = 2 << lsh;
+							grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim / 2)] |= mask;
+						}
 					}
 				}
 			}
@@ -224,7 +298,7 @@ void _UMC_Chunk_label_grid(struct UMC_Chunk* chunk)
 	}
 }
 
-int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk)
+int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk, int silent)
 {
 	assert(chunk);
 	assert(chunk->edges);
@@ -375,14 +449,15 @@ int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk)
 
 	if (pem)
 	{
-		printf("Snapping vertices...");
+		if (!silent)
+			printf("Snapping vertices...");
 		_UMC_Chunk_snap_verts(chunk, &out_vertices, &out_normals, &next_vertex, &out_size, out_indexes, next_index, w, osn);
 	}
 
 	if (!chunk->initialized)
 	{
 		if (next_vertex == 0)
-			return 0;
+			goto Cleanup;
 		chunk->vbo_size = out_size;
 		glGenBuffers(1, &chunk->v_vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, chunk->v_vbo);
@@ -416,6 +491,7 @@ int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk)
 			glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * next_vertex, out_normals, GL_STATIC_DRAW);
 		}
 	}
+Cleanup:
 	chunk->v_count = next_vertex;
 
 	free(out_vertices);
@@ -622,26 +698,16 @@ void _UMC_Chunk_create_VAO(struct UMC_Chunk* chunk)
 	if (!chunk->initialized)
 	{
 		glGenVertexArrays(1, &chunk->vao);
-		glBindVertexArray(chunk->vao);
-		glBindBuffer(GL_ARRAY_BUFFER, chunk->v_vbo);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-		glBindBuffer(GL_ARRAY_BUFFER, chunk->n_vbo);
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, chunk->ibo);
-		glEnableVertexAttribArray(0);
-		glEnableVertexAttribArray(1);
 	}
-	else
-	{
-		glBindVertexArray(chunk->vao);
-		glBindBuffer(GL_ARRAY_BUFFER, chunk->v_vbo);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-		glBindBuffer(GL_ARRAY_BUFFER, chunk->n_vbo);
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, chunk->ibo);
-		glEnableVertexAttribArray(0);
-		glEnableVertexAttribArray(1);
-	}
+	glBindVertexArray(chunk->vao);
+	glBindBuffer(GL_ARRAY_BUFFER, chunk->v_vbo);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+	glBindBuffer(GL_ARRAY_BUFFER, chunk->n_vbo);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, chunk->ibo);
+	glEnableVertexAttribArray(0);
+	glEnableVertexAttribArray(1);
+	glBindVertexArray(0);
 }
 
 __forceinline int _UMC_Chunk_calc_edge_crossing(uint32_t dimp1_h, uint16_t* grid_signs, uint32_t x0, uint32_t y0, uint32_t z0, uint32_t x1, uint32_t y1, uint32_t z1, uint32_t s0, int pem)
@@ -776,4 +842,41 @@ void _UMC_Chunk_set_isov(struct UMC_Isovertex* isov, vec3** out_vertices, vec3**
 	vec3_set((*out_vertices)[*next_vertex], isov->position[0], isov->position[1], isov->position[2]);
 	vec3_set((*out_normals)[*next_vertex], isov->normal[0], isov->normal[1], isov->normal[2]);
 	(*next_vertex)++;
+}
+
+void _UMC_Chunk_trilerp(float x, float y, float z, vec3* verts, vec3 out)
+{
+	float percents[8];
+	if (!USE_REGULAR_MC)
+	{
+		percents[0] = (1.0f - x) * (1.0f - y) * (1.0f - z);
+		percents[1] = (1.0f - x) * (1.0f - y) * (0.0f + z);
+		percents[2] = (1.0f - x) * (0.0f + y) * (1.0f - z);
+		percents[3] = (1.0f - x) * (0.0f + y) * (0.0f + z);
+		percents[4] = (0.0f + x) * (1.0f - y) * (1.0f - z);
+		percents[5] = (0.0f + x) * (1.0f - y) * (0.0f + z);
+		percents[6] = (0.0f + x) * (0.0f + y) * (1.0f - z);
+		percents[7] = (0.0f + x) * (0.0f + y) * (0.0f + z);
+	}
+	else
+	{
+		percents[0] = (1.0f - x) * (1.0f - y) * (1.0f - z);
+		percents[1] = (0.0f + x) * (1.0f - y) * (1.0f - z);
+		percents[2] = (0.0f + x) * (1.0f - y) * (0.0f + z);
+		percents[3] = (1.0f - x) * (1.0f - y) * (0.0f + z);
+		percents[4] = (1.0f - x) * (0.0f + y) * (1.0f - z);
+		percents[5] = (0.0f + x) * (0.0f + y) * (1.0f - z);
+		percents[6] = (0.0f + x) * (0.0f + y) * (0.0f + z);
+		percents[7] = (1.0f - x) * (0.0f + y) * (0.0f + z);
+	}
+
+	vec3_set(out, 0, 0, 0);
+	vec3_add_coeff(out, verts[0], out, percents[0]);
+	vec3_add_coeff(out, verts[1], out, percents[1]);
+	vec3_add_coeff(out, verts[2], out, percents[2]);
+	vec3_add_coeff(out, verts[3], out, percents[3]);
+	vec3_add_coeff(out, verts[4], out, percents[4]);
+	vec3_add_coeff(out, verts[5], out, percents[5]);
+	vec3_add_coeff(out, verts[6], out, percents[6]);
+	vec3_add_coeff(out, verts[7], out, percents[7]);
 }

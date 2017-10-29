@@ -7,6 +7,8 @@
 
 struct FPSCamera
 {
+	int last_1 : 1;
+	int last_2 : 2;
 	float speed;
 	vec3 position;
 	vec3 rot;

@@ -64,3 +64,37 @@ inline float vec3_distance2(vec3 a, vec3 b)
 	z = b[2] - a[2];
 	return x*x + y*y + z*z;
 }
+
+inline const int vec3_compare(const vec3 a, const vec3 b)
+{
+	return !(a[0] == b[0] && a[1] == b[1] && a[2] == b[2]);
+}
+
+inline uint64_t vec3_hash(vec3 v)
+{
+	const float p1 = 73856093.0f;
+	const float p2 = 19349663.0f;
+	const float p3 = 83492791.0f;
+
+	float a = v[0] * p1;
+	float b = v[1] * p2;
+	float c = v[2] * p3;
+
+	int64_t i = *((int*)&a);
+	int64_t j = *((int*)&b);
+	int64_t k = *((int*)&c);
+
+	return i ^ j ^ k;
+}
+
+inline void vec3_midpoint(vec3 dest, vec3 a, vec3 b)
+{
+	vec3_set(dest, (a[0] + b[0]) * 0.5f, (a[1] + b[1]) * 0.5f, (a[2] + b[2]) * 0.5f);
+}
+
+inline void vec3_add_coeff(vec3 dest, vec3 a, vec3 b, float a_coeff)
+{
+	dest[0] = a[0] * a_coeff + b[0];
+	dest[1] = a[1] * a_coeff + b[1];
+	dest[2] = a[2] * a_coeff + b[2];
+}

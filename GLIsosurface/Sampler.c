@@ -2,7 +2,7 @@
 
 #include <math.h>
 
-const float Sampler_world_size = 64;
+const float Sampler_world_size = 256;
 
 __forceinline void Sampler_get_intersection(vec3 v0, vec3 v1, float s0, float s1, float isolevel, vec3 out)
 {

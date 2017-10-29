@@ -36,6 +36,18 @@
     <ClCompile Include="OpenSimplexNoise.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Tetrahedron.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="THierarchy.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MemoryPool.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Hexahedron.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="VoxelScene.h">
@@ -66,6 +78,30 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="OpenSimplexNoise.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Tetrahedron.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Options.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TetrahedronTable.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Hashmap.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="THierarchy.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MemoryPool.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Hexahedron.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DebugHeader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
