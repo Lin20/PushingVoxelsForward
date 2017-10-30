@@ -104,5 +104,14 @@
     <ClInclude Include="DebugHeader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="nuklear.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nuklear_glfw_gl3.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nuklear_styles.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

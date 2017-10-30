@@ -3,15 +3,34 @@
 
 #include "DebugScene.h"
 #include "Core.h"
+#include "Options.h"
+
+#define NK_INCLUDE_FIXED_TYPES
+#define NK_INCLUDE_STANDARD_IO
+#define NK_INCLUDE_STANDARD_VARARGS
+#define NK_INCLUDE_DEFAULT_ALLOCATOR
+#define NK_INCLUDE_VERTEX_BUFFER_OUTPUT
+#define NK_INCLUDE_FONT_BAKING
+#define NK_INCLUDE_DEFAULT_FONT
+#define NK_IMPLEMENTATION
+#define NK_GLFW_GL3_IMPLEMENTATION
+#include "nuklear.h"
+#include "nuklear_glfw_gl3.h"
+#include "nuklear_styles.h"
+#define MAX_VERTEX_BUFFER 512 * 1024
+#define MAX_ELEMENT_BUFFER 128 * 1024
 
 #define FILL_MODE_FILL 0
 #define FILL_MODE_BOTH 1
 #define FILL_MODE_WIRE 2
 
+void abbreviate_int(int d, int* i_out, char* c_out);
+
 int DebugScene_init(struct DebugScene* out, struct RenderInput* render_input)
 {
 	memset(out, 0, sizeof(struct DebugScene));
 	out->fillmode = FILL_MODE_BOTH;
+	out->line_width = 1.5f;
 
 	float dx[] = { 0, 1, 0, 1, 0, 1, 0, 1 };
 	float dy[] = { 0, 0, 1, 1, 0, 0, 1, 1 };
@@ -136,6 +155,14 @@ int DebugScene_init(struct DebugScene* out, struct RenderInput* render_input)
 	out->outline_shader_view = glGetUniformLocation(out->outline_sp, "view");
 	out->outline_shader_mul_clr = glGetUniformLocation(out->outline_sp, "mul_color");
 
+	printf("Initializing nuklear...");
+	out->nkc = nk_glfw3_init(render_input->window, NK_GLFW3_INSTALL_CALLBACKS);
+	struct nk_font_atlas *atlas;
+	nk_glfw3_font_stash_begin(&atlas);
+	nk_glfw3_font_stash_end();
+	set_style(out->nkc, THEME_DARK);
+	printf("Done.\n\n");
+
 	FPSCamera_init(&out->camera, render_input->width, render_input->height, out->shader_projection, out->shader_view, render_input);
 	//FPSCamera_set_shader(&out->camera, out->outline_shader_projection, out->outline_shader_view);
 
@@ -152,6 +179,7 @@ int DebugScene_cleanup(struct DebugScene* scene)
 {
 	//UMC_Chunk_destroy(&scene->test_chunk);
 	THierarchy_destroy(&scene->hierarchy);
+	nk_glfw3_shutdown();
 	return 0;
 }
 
@@ -173,7 +201,7 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 			scene->test_chunk.timer += 0.1f;
 		else
 			scene->test_chunk.timer += 0.01f;
-		UMC_Chunk_run(&scene->test_chunk, 0, 0);
+		//UMC_Chunk_run(&scene->test_chunk, 0, 0,);
 	}
 
 	glClearColor(0.02f, 0.02f, 0.1f, 1.0f);
@@ -195,13 +223,10 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 
 		while (safety_counter++ < 1000000 && next_node)
 		{
-			for (int i = 0; i < 4; i++)
+			if (next_node->p_count > 0)
 			{
-				if (next_node->hexahedra[i].chunk.p_count > 0)
-				{
-					glBindVertexArray(next_node->hexahedra[i].chunk.vao);
-					glDrawElements(GL_TRIANGLES, next_node->hexahedra[i].chunk.p_count, GL_UNSIGNED_INT, 0);
-				}
+				glBindVertexArray(next_node->vao);
+				glDrawElements(GL_TRIANGLES, next_node->p_count, GL_UNSIGNED_INT, 0);
 			}
 			next_node = next_node->next;
 		}
@@ -220,22 +245,19 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 	}
 	if (scene->fillmode == FILL_MODE_BOTH)
 	{
-		glLineWidth(1.0f);
+		glLineWidth(scene->line_width);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 		glUniform3f(scene->shader_mul_clr, 1.0f, 0.6f, 0);
-		
+
 		uint32_t safety_counter = 0;
 		struct TetrahedronNode* next_node = scene->hierarchy.first_leaf;
 
 		while (safety_counter++ < 1000000 && next_node)
 		{
-			for (int i = 0; i < 4; i++)
+			if (next_node->p_count > 0)
 			{
-				if (next_node->hexahedra[i].chunk.p_count > 0)
-				{
-					glBindVertexArray(next_node->hexahedra[i].chunk.vao);
-					glDrawElements(GL_TRIANGLES, next_node->hexahedra[i].chunk.p_count, GL_UNSIGNED_INT, 0);
-				}
+				glBindVertexArray(next_node->vao);
+				glDrawElements(GL_TRIANGLES, next_node->p_count, GL_UNSIGNED_INT, 0);
 			}
 			next_node = next_node->next;
 		}
@@ -250,6 +272,79 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 	//glDrawElements(GL_LINES, scene->hierarchy.outline_p_count, GL_UNSIGNED_INT, 0);
 
 	glfwPollEvents();
+
+	nk_glfw3_new_frame();
+	if (nk_begin(scene->nkc, "Options", nk_rect(50, 50, 300, 330),
+		NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE |
+		NK_WINDOW_MINIMIZABLE | NK_WINDOW_TITLE))
+	{
+		char lbl[64];
+
+		nk_layout_row_dynamic(scene->nkc, 90, 1);
+		if (nk_group_begin(scene->nkc, "Results", 0))
+		{
+			nk_layout_row_dynamic(scene->nkc, 14, 1);
+			char c_abbr = 0;
+			int i_abbr = 0;
+			abbreviate_int(scene->hierarchy.v_count * 24, &i_abbr, &c_abbr);
+			sprintf(lbl, "Vertices: %i (%i%cB)", scene->hierarchy.v_count, i_abbr, c_abbr);
+			nk_label(scene->nkc, lbl, NK_TEXT_LEFT);
+
+			abbreviate_int(scene->hierarchy.p_count * 4, &i_abbr, &c_abbr);
+			sprintf(lbl, "Prims: %i (%i%cB)", scene->hierarchy.p_count / 3, i_abbr, c_abbr);
+
+			nk_label(scene->nkc, lbl, NK_TEXT_LEFT);
+			sprintf(lbl, "Leaves: %i", scene->hierarchy.leaf_count);
+
+			nk_label(scene->nkc, lbl, NK_TEXT_LEFT);
+
+			sprintf(lbl, "Time: %ims", scene->hierarchy.last_extract_time);
+			nk_label(scene->nkc, lbl, NK_TEXT_LEFT);
+
+			nk_group_end(scene->nkc);
+		}
+
+		nk_layout_row_dynamic(scene->nkc, 74, 1);
+		if (nk_group_begin(scene->nkc, "View", 0))
+		{
+			nk_layout_row_dynamic(scene->nkc, 14, 1);
+			sprintf(lbl, "Speed: %g", scene->camera.speed);
+			nk_label(scene->nkc, lbl, NK_TEXT_LEFT);
+
+			sprintf(lbl, "Pos: %.2f, %.2f, %.2f", scene->camera.position[0], scene->camera.position[1], scene->camera.position[2]);
+			nk_label(scene->nkc, lbl, NK_TEXT_LEFT);
+
+			nk_layout_row_dynamic(scene->nkc, 20, 2);
+			nk_value_float(scene->nkc, "Line Width", scene->line_width);
+			nk_slider_float(scene->nkc, 1.0f, &scene->line_width, 5.0f, 0.5f);
+
+			nk_group_end(scene->nkc);
+		}
+
+		nk_layout_row_dynamic(scene->nkc, 64, 1);
+		if (nk_group_begin(scene->nkc, "Snapping", 0))
+		{
+			nk_layout_row_dynamic(scene->nkc, 20, 1);
+			scene->hierarchy.pem = nk_option_label(scene->nkc, "Enable Snapping", scene->hierarchy.pem);
+
+			nk_layout_row_dynamic(scene->nkc, 20, 2);
+			nk_value_float(scene->nkc, "Threshold", scene->hierarchy.snap_threshold);
+			nk_slider_float(scene->nkc, 0.0f, &scene->hierarchy.snap_threshold, 0.707f, 0.025f);
+			nk_group_end(scene->nkc);
+		}
+
+		nk_layout_row_dynamic(scene->nkc, 30, 1);
+		if (nk_button_text(scene->nkc, "Extract all", 11))
+		{
+			THierarchy_extract_all_leaves(&scene->hierarchy);
+		}
+	}
+	nk_end(scene->nkc);
+
+	glPushAttrib(GL_ALL_ATTRIB_BITS);
+	nk_glfw3_render(NK_ANTI_ALIASING_ON, MAX_VERTEX_BUFFER, MAX_ELEMENT_BUFFER);
+	glPopAttrib();
+
 	glfwSwapBuffers(input->window);
 
 	if (glfwGetKey(input->window, GLFW_KEY_ESCAPE)) {
@@ -257,4 +352,23 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 	}
 
 	return 0;
+}
+
+void abbreviate_int(int d, int* i_out, char* c_out)
+{
+	if (d > 1024 * 1024)
+	{
+		*c_out = 'M';
+		*i_out = d / (1024 * 1024);
+	}
+	else if (d > 1024)
+	{
+		*c_out = 'K';
+		*i_out = d / 1024;
+	}
+	else
+	{
+		*c_out = 'K';
+		*i_out = 1;
+	}
 }

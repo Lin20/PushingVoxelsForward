@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cglm\cglm.h>
+#include <math.h>
 
 #define PI 3.1415926535897932384626433832795f
 #define PI_D 3.1415926535897932384626433832795
@@ -54,6 +55,15 @@ inline void vec3_negate(vec3 dest)
 	dest[0] = -dest[0];
 	dest[1] = -dest[1];
 	dest[2] = -dest[2];
+}
+
+inline float vec3_distance(vec3 a, vec3 b)
+{
+	float x, y, z;
+	x = b[0] - a[0];
+	y = b[1] - a[1];
+	z = b[2] - a[2];
+	return sqrtf(x*x + y*y + z*z);
 }
 
 inline float vec3_distance2(vec3 a, vec3 b)

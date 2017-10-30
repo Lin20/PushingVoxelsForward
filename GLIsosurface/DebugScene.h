@@ -12,6 +12,7 @@
 struct DebugScene
 {
 	int fillmode;
+	float line_width;
 	GLuint points_vbo;
 	GLuint colors_vbo;
 	GLuint vao;
@@ -36,6 +37,8 @@ struct DebugScene
 	struct FPSCamera camera;
 	struct UMC_Chunk test_chunk;
 	struct THierarchy hierarchy;
+
+	struct nk_context* nkc;
 };
 
 int DebugScene_init(struct DebugScene* out, struct RenderInput* render_input);

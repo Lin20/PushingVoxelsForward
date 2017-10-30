@@ -18,7 +18,6 @@
 
 #define USE_MORTON_CODING 0
 #define ENCODE3D(x,y,z,dp1) (USE_MORTON_CODING ? GetMortonCode((x),(y),(z)) : INDEX3D(x,y,z,dp1))
-#define SNAP_THRESHOLD 0.5f
 
 #define MC_POLYGONIZE_L(xoff, yoff, zoff, m) \
 	if (grid_signs[ENCODE3D((x + xoff) >> 1, (y + yoff) >> 1, (z + zoff) >> 1, dimp1_h)] & (1 << ((((z + zoff) & 1) * 1) + (((y + yoff) & 1) * 2) + (((x + xoff) & 1) * 4)))) \
@@ -41,10 +40,13 @@ out_indexes[next_index++] = index3d;
 
 #define SNAPMC_EDGE_CHECK(x, y, z, i) \
 e = edges[INDEX3D(x, y, z, dim + 1) * 3 + i]; \
-if (e.grid_v0 != e.grid_v1) \
+if (e.grid_v0 != e.grid_v1 && e.length > 0.0f) \
 { \
 	assert(e.grid_v0 == v_index || e.grid_v1 == v_index); \
-	distance = vec3_distance2(e.iso_vertex.position, v->position); \
+	assert(e.length > 0.0f); \
+	if (e.length > max_length) \
+		max_length = e.length; \
+	distance = vec3_distance(e.iso_vertex.position, v->position) / e.length; \
 	if (distance < min_distance) \
 	{ \
 		min_distance = distance; \
@@ -54,15 +56,16 @@ if (e.grid_v0 != e.grid_v1) \
 
 typedef uint32_t COORD_TYPE;
 
-const float(*sampler_fn)(float x, float y, float z, float w, struct osn_context* osn) = &SurfaceFn_sphere;
+const float(*sampler_fn)(float x, float y, float z, float w, struct osn_context* osn) = &SurfaceFn_3d_terrain;
 
-void UMC_Chunk_init(struct UMC_Chunk* dest, uint32_t dim, int index_primitives, int use_pem)
+void UMC_Chunk_init(struct UMC_Chunk* dest, uint32_t dim, int index_primitives, int use_pem, float threshold)
 {
 	assert(dim != 0);
 
 	dest->timer = 0;
 	dest->indexed_primitives = index_primitives;
 	dest->pem = use_pem;
+	dest->snap_threshold = threshold;
 	dest->initialized = 0;
 
 	dest->vao = 0;
@@ -78,12 +81,18 @@ void UMC_Chunk_init(struct UMC_Chunk* dest, uint32_t dim, int index_primitives, 
 	dest->grid_verts = 0;
 	dest->edges = 0;
 
-	dest->osn = 0;
-
 	dest->grid_signs = 0;
 	dest->grid_verts = 0;
 	dest->edges = 0;
 	dest->edge_v_indexes = 0;
+
+	dest->v_out = 0;
+	dest->n_out = 0;
+	dest->vn_size = 0;
+	dest->vn_next = 0;
+	dest->i_out = 0;
+	dest->i_size = 0;
+	dest->i_next = 0;
 }
 
 void UMC_Chunk_destroy(struct UMC_Chunk* chunk)
@@ -93,15 +102,38 @@ void UMC_Chunk_destroy(struct UMC_Chunk* chunk)
 	free(chunk->grid_verts);
 	free(chunk->edges);
 	free(chunk->edge_v_indexes);
-	open_simplex_noise_free(chunk->osn);
 	if (chunk->initialized)
 	{
-		glDeleteVertexArrays(1, &chunk->vao);
-		glDeleteBuffers((chunk->indexed_primitives ? 3 : 2), &chunk->v_vbo);
+		//glDeleteVertexArrays(1, &chunk->vao);
+		//glDeleteBuffers((chunk->indexed_primitives ? 3 : 2), &chunk->v_vbo);
 	}
+
+	chunk->timer = 0;
+	chunk->indexed_primitives = 0;
+	chunk->pem = 0;
+	chunk->snap_threshold = 0;
+	chunk->initialized = 0;
+
+	chunk->vao = 0;
+	chunk->v_vbo = 0;
+	chunk->n_vbo = 0;
+	chunk->ibo = 0;
+
+	chunk->dim = 0;
+	chunk->v_count = 0;
+	chunk->p_count = 0;
+	chunk->snapped_count = 0;
+
+	chunk->grid_verts = 0;
+	chunk->edges = 0;
+
+	chunk->grid_signs = 0;
+	chunk->grid_verts = 0;
+	chunk->edges = 0;
+	chunk->edge_v_indexes = 0;
 }
 
-void UMC_Chunk_run(struct UMC_Chunk* chunk, vec3* corner_verts, int silent)
+void UMC_Chunk_run(struct UMC_Chunk* chunk, vec3* corner_verts, int silent, struct osn_context* osn)
 {
 	assert(chunk);
 	double total_ms = 0;
@@ -112,15 +144,16 @@ void UMC_Chunk_run(struct UMC_Chunk* chunk, vec3* corner_verts, int silent)
 
 	if (!chunk->initialized)
 	{
-		open_simplex_noise(77374, &chunk->osn);
 		uint32_t dimp1 = chunk->dim + 1;
 		uint32_t dimp1_h = dimp1 / 2;
+
 		chunk->grid_signs = malloc(dimp1_h * dimp1_h * dimp1_h * sizeof(uint16_t));
 		chunk->grid_verts = malloc(dimp1 * dimp1 * dimp1 * sizeof(struct UMC_Isovertex));
 		chunk->edges = malloc(dimp1 * dimp1 * dimp1 * 3 * sizeof(struct UMC_Edge));
 		chunk->edge_v_indexes = malloc(dimp1 * dimp1 * dimp1 * 3 * sizeof(uint32_t));
+
 		memset(chunk->grid_signs, 0, dimp1_h * dimp1_h * dimp1_h * sizeof(uint16_t));
-		memset(chunk->edges, 0, dimp1 * dimp1 * dimp1 * sizeof(struct UMC_Edge));
+		memset(chunk->edges, 0, dimp1 * dimp1 * dimp1 * 3 * sizeof(struct UMC_Edge));
 		memset(chunk->edge_v_indexes, 0, dimp1 * dimp1 * dimp1 * 3 * sizeof(uint32_t));
 	}
 	else
@@ -130,9 +163,11 @@ void UMC_Chunk_run(struct UMC_Chunk* chunk, vec3* corner_verts, int silent)
 		clock_t start_clock = clock();
 		uint32_t dimp1 = chunk->dim + 1;
 		uint32_t dimp1_h = dimp1 / 2;
+
 		memset(chunk->grid_signs, 0, dimp1_h * dimp1_h * dimp1_h * sizeof(uint16_t));
 		memset(chunk->edges, 0, dimp1 * dimp1 * dimp1 * 3 * sizeof(struct UMC_Edge));
 		memset(chunk->edge_v_indexes, 0, dimp1 * dimp1 * dimp1 * 3 * sizeof(uint32_t));
+
 		total_ms += clock() - start_clock;
 		if (!silent)
 			printf("done (%i ms)\n", (int)(total_ms / (double)CLOCKS_PER_SEC * 1000.0));
@@ -142,14 +177,14 @@ void UMC_Chunk_run(struct UMC_Chunk* chunk, vec3* corner_verts, int silent)
 	if (!silent)
 		printf("-Label grid...");
 	clock_t start_clock = clock();
-	_UMC_Chunk_label_grid(chunk, corner_verts);
+	_UMC_Chunk_label_grid(chunk, corner_verts, osn);
 	temp = clock() - start_clock;
 	total_ms += temp;
 	if (!silent)
 		printf("done (%i ms)\n-Label edges...", (int)(temp / (double)CLOCKS_PER_SEC * 1000.0));
 
 	start_clock = clock();
-	if (!_UMC_Chunk_label_edges(chunk, silent))
+	if (!_UMC_Chunk_label_edges(chunk, silent, osn))
 	{
 		if (!silent)
 			printf("done.\nNo edge crossings detected. Early abandon.\n");
@@ -180,7 +215,7 @@ void UMC_Chunk_run(struct UMC_Chunk* chunk, vec3* corner_verts, int silent)
 	}
 }
 
-void _UMC_Chunk_label_grid(struct UMC_Chunk* chunk, vec3* corner_verts)
+void _UMC_Chunk_label_grid(struct UMC_Chunk* chunk, vec3* corner_verts, struct osn_context* osn)
 {
 	assert(chunk);
 	assert(chunk->grid_verts);
@@ -193,7 +228,6 @@ void _UMC_Chunk_label_grid(struct UMC_Chunk* chunk, vec3* corner_verts)
 	struct UMC_Isovertex* v;
 	float fx, fy, fz, s;
 	float w = chunk->timer;
-	struct osn_context* osn = chunk->osn;
 
 	if (!corner_verts)
 	{
@@ -298,7 +332,7 @@ void _UMC_Chunk_label_grid(struct UMC_Chunk* chunk, vec3* corner_verts)
 	}
 }
 
-int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk, int silent)
+int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk, int silent, struct osn_context* osn)
 {
 	assert(chunk);
 	assert(chunk->edges);
@@ -313,10 +347,16 @@ int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk, int silent)
 	uint32_t* edge_v_indexes = chunk->edge_v_indexes;
 	uint32_t* edge_v;
 
-	vec3* out_vertices = malloc(4096 * sizeof(vec3));
-	vec3* out_normals = malloc(4096 * sizeof(vec3));
-	uint32_t next_vertex = 0;
-	uint32_t out_size = 4096;
+	//vec3* out_vertices = malloc(4096 * sizeof(vec3));
+	//vec3* out_normals = malloc(4096 * sizeof(vec3));
+	//uint32_t next_vertex = 0;
+	//uint32_t out_size = 4096;
+
+	uint32_t start_index = *chunk->vn_next;
+	vec3** out_vertices = chunk->v_out;
+	vec3** out_normals = chunk->n_out;
+	uint32_t* next_vertex = chunk->vn_next;
+	uint32_t* out_size = chunk->v_out;
 
 	uint32_t* out_indexes = 0;
 	uint32_t next_index = 0;
@@ -326,7 +366,6 @@ int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk, int silent)
 		out_indexes = malloc(4096 * sizeof(uint32_t));
 
 	float w = chunk->timer;
-	struct osn_context* osn = chunk->osn;
 
 	uint32_t v0;
 	int result_mask;
@@ -362,7 +401,7 @@ int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk, int silent)
 						e_x->grid_v0 = v0;
 						e_x->grid_v1 = INDEX3D(x + 1, y, z, dim + 1);
 						edge_v = edge_v_indexes + v0 * 3;
-						_UMC_Chunk_calc_edge_isov(chunk, e_x, grid, edge_v, &out_vertices, &out_normals, &next_vertex, &out_size, w, osn);
+						_UMC_Chunk_calc_edge_isov(chunk, e_x, grid, edge_v, out_vertices, out_normals, next_vertex, out_size, w, osn);
 
 						if (pem)
 						{
@@ -376,11 +415,11 @@ int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk, int silent)
 					}
 					if (pem && (result_mask & 1))
 					{
-						_UMC_Chunk_set_isov(grid + v0, &out_vertices, &out_normals, &next_vertex, &out_size, w, osn);
+						_UMC_Chunk_set_isov(grid + v0, out_vertices, out_normals, next_vertex, out_size, w, osn);
 					}
 					if (pem && (result_mask & 2))
 					{
-						_UMC_Chunk_set_isov(grid + INDEX3D(x + 1, y, z, dim + 1), &out_vertices, &out_normals, &next_vertex, &out_size, w, osn);
+						_UMC_Chunk_set_isov(grid + INDEX3D(x + 1, y, z, dim + 1), out_vertices, out_normals, next_vertex, out_size, w, osn);
 					}
 				}
 				if (y < dim)
@@ -392,7 +431,7 @@ int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk, int silent)
 						e_y->grid_v0 = v0;
 						e_y->grid_v1 = INDEX3D(x, y + 1, z, dim + 1);
 						edge_v = edge_v_indexes + v0 * 3 + 1;
-						_UMC_Chunk_calc_edge_isov(chunk, e_y, grid, edge_v, &out_vertices, &out_normals, &next_vertex, &out_size, w, osn);
+						_UMC_Chunk_calc_edge_isov(chunk, e_y, grid, edge_v, out_vertices, out_normals, next_vertex, out_size, w, osn);
 
 						if (pem)
 						{
@@ -406,11 +445,11 @@ int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk, int silent)
 					}
 					if (pem && (result_mask & 1))
 					{
-						_UMC_Chunk_set_isov(grid + v0, &out_vertices, &out_normals, &next_vertex, &out_size, w, osn);
+						_UMC_Chunk_set_isov(grid + v0, out_vertices, out_normals, next_vertex, out_size, w, osn);
 					}
 					if (pem && (result_mask & 2))
 					{
-						_UMC_Chunk_set_isov(grid + INDEX3D(x, y + 1, z, dim + 1), &out_vertices, &out_normals, &next_vertex, &out_size, w, osn);
+						_UMC_Chunk_set_isov(grid + INDEX3D(x, y + 1, z, dim + 1), out_vertices, out_normals, next_vertex, out_size, w, osn);
 					}
 				}
 				if (z < dim)
@@ -422,7 +461,7 @@ int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk, int silent)
 						e_z->grid_v0 = v0;
 						e_z->grid_v1 = INDEX3D(x, y, z + 1, dim + 1);
 						edge_v = edge_v_indexes + v0 * 3 + 2;
-						_UMC_Chunk_calc_edge_isov(chunk, e_z, grid, edge_v, &out_vertices, &out_normals, &next_vertex, &out_size, w, osn);
+						_UMC_Chunk_calc_edge_isov(chunk, e_z, grid, edge_v, out_vertices, out_normals, next_vertex, out_size, w, osn);
 
 						if (pem)
 						{
@@ -436,11 +475,11 @@ int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk, int silent)
 					}
 					if (pem && (result_mask & 1))
 					{
-						_UMC_Chunk_set_isov(grid + v0, &out_vertices, &out_normals, &next_vertex, &out_size, w, osn);
+						_UMC_Chunk_set_isov(grid + v0, out_vertices, out_normals, next_vertex, out_size, w, osn);
 					}
 					if (pem && (result_mask & 2))
 					{
-						_UMC_Chunk_set_isov(grid + INDEX3D(x, y, z + 1, dim + 1), &out_vertices, &out_normals, &next_vertex, &out_size, w, osn);
+						_UMC_Chunk_set_isov(grid + INDEX3D(x, y, z + 1, dim + 1), out_vertices, out_normals, next_vertex, out_size, w, osn);
 					}
 				}
 			}
@@ -451,10 +490,10 @@ int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk, int silent)
 	{
 		if (!silent)
 			printf("Snapping vertices...");
-		_UMC_Chunk_snap_verts(chunk, &out_vertices, &out_normals, &next_vertex, &out_size, out_indexes, next_index, w, osn);
+		_UMC_Chunk_snap_verts(chunk, out_vertices, out_normals, next_vertex, out_size, out_indexes, next_index, w, osn);
 	}
 
-	if (!chunk->initialized)
+	/*if (!chunk->initialized)
 	{
 		if (next_vertex == 0)
 			goto Cleanup;
@@ -490,12 +529,12 @@ int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk, int silent)
 			glBindBuffer(GL_ARRAY_BUFFER, chunk->n_vbo);
 			glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * next_vertex, out_normals, GL_STATIC_DRAW);
 		}
-	}
+	}*/
 Cleanup:
-	chunk->v_count = next_vertex;
+	chunk->v_count = *next_vertex - start_index;
 
-	free(out_vertices);
-	free(out_normals);
+	//free(out_vertices);
+	//free(out_normals);
 	if (pem)
 		free(out_indexes);
 
@@ -517,6 +556,7 @@ void _UMC_Chunk_snap_verts(struct UMC_Chunk* chunk, vec3** out_vertices, vec3** 
 	struct UMC_Edge* edges = chunk->edges;
 	struct UMC_Isovertex* v;
 	float fx, fy, fz, s;
+	float snap_threshold = chunk->snap_threshold;
 
 	uint32_t v_index;
 	for (uint32_t idx = 0; idx < out_index_size; idx++)
@@ -533,8 +573,9 @@ void _UMC_Chunk_snap_verts(struct UMC_Chunk* chunk, vec3** out_vertices, vec3** 
 		if (z == 0 || z >= dim)
 			continue;
 
-		float min_distance = 3.4e37;
+		float min_distance = 3.4e37f;
 		float distance;
+		float max_length = 0;
 		struct UMC_Edge e;
 		struct UMC_Edge min_edge;
 
@@ -545,7 +586,7 @@ void _UMC_Chunk_snap_verts(struct UMC_Chunk* chunk, vec3** out_vertices, vec3** 
 		SNAPMC_EDGE_CHECK(x, y - 1, z, 1);
 		SNAPMC_EDGE_CHECK(x, y, z - 1, 2);
 
-		if (min_distance <= SNAP_THRESHOLD * SNAP_THRESHOLD)
+		if (min_distance <= snap_threshold)
 		{
 			uint32_t lsh = (((z & 1) * 1) + ((y & 1) * 2) + ((x & 1) * 4)) * 2;
 			grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim_h)] &= ~(3 << lsh);
@@ -573,9 +614,13 @@ void _UMC_Chunk_polygonize(struct UMC_Chunk* chunk)
 	struct UMC_Cell cell;
 	uint32_t v0;
 
-	uint32_t* out_indexes = malloc(4096 * sizeof(uint32_t));
-	uint32_t next_index = 0;
-	uint32_t out_size = 4096;
+	//uint32_t* out_indexes = malloc(4096 * sizeof(uint32_t));
+	//uint32_t next_index = 0;
+	//uint32_t out_size = 4096;
+	uint32_t start_index = *chunk->i_next;
+	uint32_t** out_indexes = chunk->i_out;
+	uint32_t* next_index = chunk->i_next;
+	uint32_t out_size = chunk->i_size;
 	uint8_t temp_signs[8];
 
 	for (uint32_t x = 0; x < dim; x++)
@@ -659,12 +704,12 @@ void _UMC_Chunk_polygonize(struct UMC_Chunk* chunk)
 					cell.iso_verts[8 + 11] = edge_v_indexes + INDEX3D(x, y + 1, z + 1, dim + 1) * 3 + EDGE_X;
 				}
 
-				_UMC_Chunk_gen_tris(&cell, &out_indexes, &next_index, &out_size, pem);
+				_UMC_Chunk_gen_tris(&cell, out_indexes, next_index, out_size, pem);
 			}
 		}
 	}
 
-	if (!chunk->initialized)
+	/*if (!chunk->initialized)
 	{
 		chunk->ibo_size = out_size;
 		glGenBuffers(1, &chunk->ibo);
@@ -687,10 +732,10 @@ void _UMC_Chunk_polygonize(struct UMC_Chunk* chunk)
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, chunk->ibo);
 			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * next_index, out_indexes, GL_STATIC_DRAW);
 		}
-	}
+	}*/
 
-	chunk->p_count = next_index;
-	free(out_indexes);
+	chunk->p_count = *next_index - start_index;
+	//free(out_indexes);
 }
 
 void _UMC_Chunk_create_VAO(struct UMC_Chunk* chunk)
@@ -762,6 +807,7 @@ __forceinline int _UMC_Chunk_calc_edge_isov(struct UMC_Chunk* chunk, struct UMC_
 	// edge->grid_v1 = gv1;
 	*edge_v = *next_vertex;
 
+	edge->length = vec3_distance(gv0.position, gv1.position);
 	Sampler_get_intersection(gv0.position, gv1.position, gv0.value, gv1.value, ISOLEVEL, edge->iso_vertex.position);
 	_UMC_get_grad(edge->iso_vertex.position[0], edge->iso_vertex.position[1], edge->iso_vertex.position[2], w, edge->iso_vertex.normal, osn);
 	edge->iso_vertex.index = *next_vertex;
@@ -847,28 +893,14 @@ void _UMC_Chunk_set_isov(struct UMC_Isovertex* isov, vec3** out_vertices, vec3**
 void _UMC_Chunk_trilerp(float x, float y, float z, vec3* verts, vec3 out)
 {
 	float percents[8];
-	if (!USE_REGULAR_MC)
-	{
-		percents[0] = (1.0f - x) * (1.0f - y) * (1.0f - z);
-		percents[1] = (1.0f - x) * (1.0f - y) * (0.0f + z);
-		percents[2] = (1.0f - x) * (0.0f + y) * (1.0f - z);
-		percents[3] = (1.0f - x) * (0.0f + y) * (0.0f + z);
-		percents[4] = (0.0f + x) * (1.0f - y) * (1.0f - z);
-		percents[5] = (0.0f + x) * (1.0f - y) * (0.0f + z);
-		percents[6] = (0.0f + x) * (0.0f + y) * (1.0f - z);
-		percents[7] = (0.0f + x) * (0.0f + y) * (0.0f + z);
-	}
-	else
-	{
-		percents[0] = (1.0f - x) * (1.0f - y) * (1.0f - z);
-		percents[1] = (0.0f + x) * (1.0f - y) * (1.0f - z);
-		percents[2] = (0.0f + x) * (1.0f - y) * (0.0f + z);
-		percents[3] = (1.0f - x) * (1.0f - y) * (0.0f + z);
-		percents[4] = (1.0f - x) * (0.0f + y) * (1.0f - z);
-		percents[5] = (0.0f + x) * (0.0f + y) * (1.0f - z);
-		percents[6] = (0.0f + x) * (0.0f + y) * (0.0f + z);
-		percents[7] = (1.0f - x) * (0.0f + y) * (0.0f + z);
-	}
+	percents[0] = (1.0f - x) * (1.0f - y) * (1.0f - z);
+	percents[1] = (0.0f + x) * (1.0f - y) * (1.0f - z);
+	percents[2] = (0.0f + x) * (1.0f - y) * (0.0f + z);
+	percents[3] = (1.0f - x) * (1.0f - y) * (0.0f + z);
+	percents[4] = (1.0f - x) * (0.0f + y) * (1.0f - z);
+	percents[5] = (0.0f + x) * (0.0f + y) * (1.0f - z);
+	percents[6] = (0.0f + x) * (0.0f + y) * (0.0f + z);
+	percents[7] = (1.0f - x) * (0.0f + y) * (0.0f + z);
 
 	vec3_set(out, 0, 0, 0);
 	vec3_add_coeff(out, verts[0], out, percents[0]);

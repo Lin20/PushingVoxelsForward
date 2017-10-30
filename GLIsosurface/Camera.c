@@ -10,6 +10,7 @@ void FPSCamera_init(struct FPSCamera* camera, uint32_t width, uint32_t height, G
 {
 	camera->last_1 = 0;
 	camera->last_2 = 0;
+	camera->lock_cursor = 0;
 	camera->speed = 0.1f;
 	vec3_set(camera->position, 0, 0, -3);
 	vec3_set(camera->rot, 0, 0, 0);
@@ -42,8 +43,6 @@ void FPSCamera_update(struct FPSCamera* camera, struct RenderInput* render_input
 	float delta_smoothness = Smoothness;
 	if (glfwGetKey(render_input->window, GLFW_KEY_LEFT_SHIFT))
 		speed *= 5.0f;
-	if (glfwGetKey(render_input->window, GLFW_KEY_LEFT_CONTROL))
-		speed *= 0.2f;
 
 	// Smooth camera support only
 	vec3 temp_move;
@@ -79,21 +78,25 @@ void FPSCamera_update(struct FPSCamera* camera, struct RenderInput* render_input
 
 	// Rotate the camera
 	float dx, dy;
-	if (glfwGetWindowAttrib(render_input->window, GLFW_FOCUSED))
+	if (glfwGetWindowAttrib(render_input->window, GLFW_FOCUSED) && (camera->lock_cursor || glfwGetMouseButton(render_input->window, GLFW_MOUSE_BUTTON_RIGHT) || glfwGetKey(render_input->window, GLFW_KEY_LEFT_CONTROL)))
 	{
+		glfwSetInputMode(render_input->window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
 		double current_x, current_y;
 		glfwGetCursorPos(render_input->window, &current_x, &current_y);
-		glfwSetCursorPos(render_input->window, render_input->width * 0.5, render_input->height * 0.5);
+		if (camera->lock_cursor)
+			glfwSetCursorPos(render_input->window, render_input->width * 0.5, render_input->height * 0.5);
+		else
+			glfwSetCursorPos(render_input->window, camera->last_x, camera->last_y);
 		dx = (float)(current_x - camera->last_x);
 		dy = (float)(current_y - camera->last_y);
-		camera->last_x = render_input->width * 0.5;
-		camera->last_y = render_input->height * 0.5;
+		glfwGetCursorPos(render_input->window, &camera->last_x, &camera->last_y);
 	}
 	else
 	{
 		dx = 0;
 		dy = 0;
 		glfwGetCursorPos(render_input->window, &camera->last_x, &camera->last_y);
+		glfwSetInputMode(render_input->window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	}
 
 	camera->turn_velocity[0] += RotationSpeed * dy;

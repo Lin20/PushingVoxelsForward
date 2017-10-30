@@ -22,6 +22,7 @@ struct UMC_Chunk
 	int pem : 1;
 	int initialized : 1;
 	float timer;
+	float snap_threshold;
 
 	GLuint vao;
 	GLuint v_vbo;
@@ -35,17 +36,25 @@ struct UMC_Chunk
 	uint32_t vbo_size;
 	uint32_t ibo_size;
 
+	vec3** v_out;
+	vec3** n_out;
+	uint32_t* vn_size;
+	uint32_t* vn_next;
+	uint32_t** i_out;
+	uint32_t* i_size;
+	uint32_t* i_next;
+
 	uint16_t* grid_signs;
 	struct UMC_Isovertex* grid_verts;
 	struct UMC_Edge* edges;
 	uint32_t* edge_v_indexes;
-	struct osn_context* osn;
 };
 
 struct UMC_Edge
 {
 	uint32_t grid_v0;
 	uint32_t grid_v1;
+	float length;
 	struct UMC_Isovertex iso_vertex;
 };
 
@@ -55,11 +64,11 @@ struct UMC_Cell
 	uint32_t* iso_verts[20];
 };
 
-void UMC_Chunk_init(struct UMC_Chunk* dest, uint32_t dim, int index_vertices, int use_pem);
+void UMC_Chunk_init(struct UMC_Chunk* dest, uint32_t dim, int index_vertices, int use_pem, float threshold);
 void UMC_Chunk_destroy(struct UMC_Chunk* chunk);
-void UMC_Chunk_run(struct UMC_Chunk* chunk, vec3* corner_verts, int silent);
-void _UMC_Chunk_label_grid(struct UMC_Chunk* chunk, vec3* corner_verts);
-int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk, int silent);
+void UMC_Chunk_run(struct UMC_Chunk* chunk, vec3* corner_verts, int silent, struct osn_context* osn);
+void _UMC_Chunk_label_grid(struct UMC_Chunk* chunk, vec3* corner_verts, struct osn_context* osn);
+int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk, int silent, struct osn_context* osn);
 void _UMC_Chunk_snap_verts(struct UMC_Chunk* chunk, vec3** out_vertices, vec3** out_normals, uint32_t* next_vertex, uint32_t* out_size, uint32_t* out_indexes, uint32_t out_index_size, float w, struct osn_context* osn);
 void _UMC_Chunk_polygonize(struct UMC_Chunk* chunk);
 void _UMC_Chunk_create_VAO(struct UMC_Chunk* chunk);

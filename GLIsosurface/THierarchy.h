@@ -40,11 +40,16 @@ struct SplitCheckQueue
 
 struct THierarchy
 {
+	int pem : 1;
 	int t_resolution;
 	int size;
+	float snap_threshold;
 	uint32_t vertex_count;
 	int max_depth;
 	int leaf_count;
+	uint32_t v_count;
+	uint32_t p_count;
+	uint32_t last_extract_time;
 	struct TetrahedronNode top_level[6];
 	struct TetrahedronNode* first_leaf;
 	struct TetrahedronNode* last_leaf;
@@ -59,6 +64,8 @@ struct THierarchy
 	uint32_t outline_ibo_size;
 	uint32_t outline_p_count;
 	int outline_created : 1;
+
+	struct osn_context* osn;
 };
 
 void TDiamond_init(struct TDiamond* dest);

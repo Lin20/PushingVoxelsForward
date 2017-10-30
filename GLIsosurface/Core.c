@@ -19,6 +19,7 @@ int Core_init(struct RenderInput* out)
 	glfwSetErrorCallback(Core_error_callback);
 	glfwWindowHint(GLFW_SAMPLES, 4);
 	out->window = glfwCreateWindow(DEFAULT_RENDER_WIDTH, DEFAULT_RENDER_HEIGHT, "GLIsosurface", NULL, NULL);
+	glfwSetWindowPos(out->window, 150, 100);
 	if (!out->window)
 	{
 		glfwTerminate();
@@ -37,7 +38,7 @@ int Core_init(struct RenderInput* out)
 	const GLubyte* renderer = glGetString(GL_RENDERER);
 	const GLubyte* version = glGetString(GL_VERSION);
 	printf("Renderer: %s\n", renderer);
-	printf("OpenGL version supported %s\n", version);
+	printf("OpenGL version supported %s\n\n", version);
 
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);

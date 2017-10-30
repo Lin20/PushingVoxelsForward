@@ -13,6 +13,7 @@ void TetrahedronNode_init_top_level(struct TetrahedronNode* out, int branch, int
 	out->child_index = 0;
 	out->stored_as_leaf = 0;
 	out->hex_init = 0;
+	out->gl_init = 0;
 
 	out->prev = 0;
 	out->next = 0;
@@ -24,6 +25,17 @@ void TetrahedronNode_init_top_level(struct TetrahedronNode* out, int branch, int
 	out->children[0] = 0;
 	out->children[1] = 0;
 	//out->refinement_diamond = 0;
+
+	out->vao = 0;
+	out->v_vbo = 0;
+	out->n_vbo = 0;
+	out->ibo = 0;
+
+	out->v_count = 0;
+	out->p_count = 0;
+	out->snapped_count = 0;
+	out->vbo_size = 0;
+	out->ibo_size = 0;
 
 	float fsize = (float)size;
 	vec3 middle_total;
@@ -67,6 +79,7 @@ void TetrahedronNode_init_child(struct TetrahedronNode* out, struct TetrahedronN
 	out->child_index = child_index;
 	out->stored_as_leaf = 0;
 	out->hex_init = 0;
+	out->gl_init = 0;
 
 	out->prev = 0;
 	out->next = 0;
@@ -78,6 +91,17 @@ void TetrahedronNode_init_child(struct TetrahedronNode* out, struct TetrahedronN
 	out->children[0] = 0;
 	out->children[1] = 0;
 	//out->refinement_diamond = 0;
+
+	out->vao = 0;
+	out->v_vbo = 0;
+	out->n_vbo = 0;
+	out->ibo = 0;
+
+	out->v_count = 0;
+	out->p_count = 0;
+	out->snapped_count = 0;
+	out->vbo_size = 0;
+	out->ibo_size = 0;
 
 	vec3 middle_total;
 	vec3_set(middle_total, 0, 0, 0);
@@ -123,6 +147,11 @@ void TetrahedronNode_destroy(struct TetrahedronNode* t)
 		{
 			Hexahedron_destroy(&t->hexahedra[i]);
 		}
+	}
+	if (t->gl_init)
+	{
+		glDeleteVertexArrays(1, &t->vao);
+		glDeleteBuffers(3, &t->v_vbo);
 	}
 }
 
@@ -194,24 +223,143 @@ int TetrahedronNode_is_leaf(struct TetrahedronNode* t)
 	return t->children[0] == 0 && t->children[1] == 0;
 }
 
-uint32_t TetrahedronNode_extract(struct TetrahedronNode* t, uint32_t* v_count, uint32_t* p_count)
+uint32_t TetrahedronNode_extract(struct TetrahedronNode* t, uint32_t* v_count, uint32_t* p_count, int pem, float threshold, struct osn_context* osn)
 {
+	int return_code = 0;
+	vec3* out_vertices = malloc(4096 * sizeof(vec3));
+	vec3* out_normals = malloc(4096 * sizeof(vec3));
+	uint32_t next_vertex = 0;
+	uint32_t out_v_size = 4096;
+
+	uint32_t* out_indexes = malloc(4096 * sizeof(uint32_t));
+	uint32_t next_index = 0;
+	uint32_t out_i_size = 4096;
+
+	if (!out_vertices || !out_normals || !out_indexes)
+	{
+		return_code = 1;
+		goto Cleanup;
+	}
+
 	if (!t->hex_init)
 	{
 		t->hex_init = 1;
-		Hexahedron_init(&t->hexahedra[0], t->vertices, 0, (t->branch & 1) == 0);
-		Hexahedron_init(&t->hexahedra[1], t->vertices, 1, (t->branch & 1) == 1);
-		Hexahedron_init(&t->hexahedra[2], t->vertices, 2, (t->branch & 1) == 0);
-		Hexahedron_init(&t->hexahedra[3], t->vertices, 3, (t->branch & 1) == 1);
+		Hexahedron_init(&t->hexahedra[0], t->vertices, 0, (t->branch & 1) == 0, pem, threshold);
+		Hexahedron_init(&t->hexahedra[1], t->vertices, 1, (t->branch & 1) == 1, pem, threshold);
+		Hexahedron_init(&t->hexahedra[2], t->vertices, 2, (t->branch & 1) == 0, pem, threshold);
+		Hexahedron_init(&t->hexahedra[3], t->vertices, 3, (t->branch & 1) == 1, pem, threshold);
+	}
+	else
+	{
+		t->hexahedra[0].chunk.pem = pem;
+		t->hexahedra[0].chunk.snap_threshold = threshold;
+		t->hexahedra[1].chunk.pem = pem;
+		t->hexahedra[1].chunk.snap_threshold = threshold;
+		t->hexahedra[2].chunk.pem = pem;
+		t->hexahedra[2].chunk.snap_threshold = threshold;
+		t->hexahedra[3].chunk.pem = pem;
+		t->hexahedra[3].chunk.snap_threshold = threshold;
 	}
 
-	Hexahedron_run(&t->hexahedra[0]);
-	Hexahedron_run(&t->hexahedra[1]);
-	Hexahedron_run(&t->hexahedra[2]);
-	Hexahedron_run(&t->hexahedra[3]);
+	Hexahedron_run(&t->hexahedra[0], &out_vertices, &out_normals, &out_v_size, &next_vertex, &out_indexes, &out_i_size, &next_index, osn);
+	Hexahedron_run(&t->hexahedra[1], &out_vertices, &out_normals, &out_v_size, &next_vertex, &out_indexes, &out_i_size, &next_index, osn);
+	Hexahedron_run(&t->hexahedra[2], &out_vertices, &out_normals, &out_v_size, &next_vertex, &out_indexes, &out_i_size, &next_index, osn);
+	Hexahedron_run(&t->hexahedra[3], &out_vertices, &out_normals, &out_v_size, &next_vertex, &out_indexes, &out_i_size, &next_index, osn);
 
-	*v_count += t->hexahedra[0].chunk.v_count + t->hexahedra[1].chunk.v_count + t->hexahedra[2].chunk.v_count + t->hexahedra[3].chunk.v_count;
-	*p_count += t->hexahedra[0].chunk.p_count + t->hexahedra[1].chunk.p_count + t->hexahedra[2].chunk.p_count + t->hexahedra[3].chunk.p_count;
+	t->v_count = t->hexahedra[0].chunk.v_count + t->hexahedra[1].chunk.v_count + t->hexahedra[2].chunk.v_count + t->hexahedra[3].chunk.v_count;
+	t->p_count = t->hexahedra[0].chunk.p_count + t->hexahedra[1].chunk.p_count + t->hexahedra[2].chunk.p_count + t->hexahedra[3].chunk.p_count;
 
-	return 0;
+	if (!t->v_count)
+		goto Cleanup;
+
+	if (!t->gl_init)
+	{
+		// Vertex buffers
+		t->vbo_size = out_v_size;
+		glGenBuffers(1, &t->v_vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, t->v_vbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * next_vertex, out_vertices, GL_STATIC_DRAW);
+
+		glGenBuffers(1, &t->n_vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, t->n_vbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * next_vertex, out_normals, GL_STATIC_DRAW);
+
+		// Index buffers
+		t->ibo_size = out_i_size;
+		glGenBuffers(1, &t->ibo);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, t->ibo);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * next_index, out_indexes, GL_STATIC_DRAW);
+	}
+	else
+	{
+		// Vertex buffers
+		if (out_v_size <= t->vbo_size)
+		{
+			glBindBuffer(GL_ARRAY_BUFFER, t->v_vbo);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * next_vertex, out_vertices, GL_STATIC_DRAW);
+
+			glBindBuffer(GL_ARRAY_BUFFER, t->n_vbo);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * next_vertex, out_normals, GL_STATIC_DRAW);
+		}
+		else
+		{
+			glDeleteBuffers(2, &t->v_vbo);
+			t->vbo_size = out_v_size;
+
+			glGenBuffers(1, &t->v_vbo);
+			glBindBuffer(GL_ARRAY_BUFFER, t->v_vbo);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * next_vertex, out_vertices, GL_STATIC_DRAW);
+
+			glGenBuffers(1, &t->n_vbo);
+			glBindBuffer(GL_ARRAY_BUFFER, t->n_vbo);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(vec3) * next_vertex, out_normals, GL_STATIC_DRAW);
+		}
+
+		// Index buffer
+		if (out_i_size <= t->ibo_size)
+		{
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, t->ibo);
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * next_index, out_indexes, GL_STATIC_DRAW);
+		}
+		else
+		{
+			glDeleteBuffers(1, &t->ibo);
+			t->ibo_size = out_i_size;
+
+			glGenBuffers(1, &t->ibo);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, t->ibo);
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * next_index, out_indexes, GL_STATIC_DRAW);
+		}
+	}
+
+	if(!t->gl_init)
+		glGenVertexArrays(1, &t->vao);
+
+	glBindVertexArray(t->vao);
+	glBindBuffer(GL_ARRAY_BUFFER, t->v_vbo);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+	glBindBuffer(GL_ARRAY_BUFFER, t->n_vbo);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, t->ibo);
+	glEnableVertexAttribArray(0);
+	glEnableVertexAttribArray(1);
+	glBindVertexArray(0);
+
+	t->gl_init = 1;
+
+Cleanup:
+	free(out_vertices);
+	free(out_normals);
+	free(out_indexes);
+
+	if (DELETE_AFTER_EXTRACT && t->hex_init)
+	{
+		t->hex_init = 0;
+		for (int i = 0; i < 4; i++)
+		{
+			Hexahedron_destroy(&t->hexahedra[i]);
+		}
+	}
+
+	return return_code;
 }
