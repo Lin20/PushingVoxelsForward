@@ -17,7 +17,7 @@ Marching Cubes vs SnapMC
 Marching Cubes vs SnapMC on a tetrahedral hierarchy
 ![Imgur](https://i.imgur.com/aVQ7ukk.png)
 SnapMC showing level of detail 18 levels deep
-[Imgur](https://i.imgur.com/Pboybbe.png)
+![Imgur](https://i.imgur.com/Pboybbe.png)
 
 ## Benchmarks on an FX-8350 (including all resets and OpenGL timings)
 **MC**: Z Torus (256^3)
