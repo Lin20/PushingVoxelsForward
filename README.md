@@ -14,6 +14,10 @@ Only 64-bit building is supported on Windows using Visual Studio 2017, but with 
 ## Screenshots
 Marching Cubes vs SnapMC
 ![Imgur](https://i.imgur.com/tE2866o.png)
+Marching Cubes vs SnapMC on a tetrahedral hierarchy
+![Imgur](https://i.imgur.com/aVQ7ukk.png)
+SnapMC showing level of detail 18 levels deep
+[Imgur](https://i.imgur.com/Pboybbe.png)
 
 ## Benchmarks on an FX-8350 (including all resets and OpenGL timings)
 **MC**: Z Torus (256^3)
@@ -47,7 +51,7 @@ Complete in 1288 ms. 93416 verts, 110808 prims (118112 snapped).
 ## To-Do
 - [x] Indexed marching cubes
 - [x] SnapMC
-- [ ] Tetrahedral hierarchy
+- [x] Tetrahedral hierarchy
 - [ ] Sharp feature support
 - [ ] Multithreaded extraction
 - [ ] GPU offloading
