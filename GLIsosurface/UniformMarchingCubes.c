@@ -56,7 +56,7 @@ if (e.grid_v0 != e.grid_v1 && e.length > 0.0f) \
 
 typedef uint32_t COORD_TYPE;
 
-const float(*sampler_fn)(float x, float y, float z, float w, struct osn_context* osn) = &SurfaceFn_3d_terrain;
+const float(*sampler_fn)(float x, float y, float z, float w, struct osn_context* osn) = &SurfaceFn_sphere;
 
 void UMC_Chunk_init(struct UMC_Chunk* dest, uint32_t dim, int index_primitives, int use_pem, float threshold)
 {
@@ -200,13 +200,13 @@ void UMC_Chunk_run(struct UMC_Chunk* chunk, vec3* corner_verts, int silent, stru
 		_UMC_Chunk_polygonize(chunk);
 		temp = clock() - start_clock;
 		total_ms += temp;
-		if (!silent)
+		/*if (!silent)
 			printf("done (%i ms)\n-Create VAO...", (int)(temp / (double)CLOCKS_PER_SEC * 1000.0));
 
 		start_clock = clock();
 		_UMC_Chunk_create_VAO(chunk);
 		temp = clock() - start_clock;
-		total_ms += temp;
+		total_ms += temp;*/
 
 		if (!silent)
 			printf("done (%i ms)\nComplete in %i ms. %i verts, %i prims (%i snapped).\n\n", (int)(temp / (double)CLOCKS_PER_SEC * 1000.0), (int)(total_ms / (double)CLOCKS_PER_SEC * 1000.0), chunk->v_count, chunk->p_count / 3, chunk->snapped_count);

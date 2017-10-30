@@ -20,7 +20,7 @@ void FPSCamera_init(struct FPSCamera* camera, uint32_t width, uint32_t height, G
 	glfwSetCursorPos(render_input->window, render_input->width * 0.5, render_input->height * 0.5);
 	glfwGetCursorPos(render_input->window, &camera->last_x, &camera->last_y);
 
-	glm_perspective(PI / 3.0f, (float)width / (float)height, 0.1f, 1000.0f, camera->projection);
+	glm_perspective(PI / 3.0f, (float)width / (float)height, 0.001f, 1000.0f, camera->projection);
 	FPSCamera_update(camera, render_input);
 	FPSCamera_set_shader(camera, shader_proj, shader_view);
 }

@@ -252,7 +252,7 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 		uint32_t safety_counter = 0;
 		struct TetrahedronNode* next_node = scene->hierarchy.first_leaf;
 
-		while (safety_counter++ < 1000000 && next_node)
+		while (safety_counter++ < 50000 && next_node)
 		{
 			if (next_node->p_count > 0)
 			{

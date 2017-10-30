@@ -9,6 +9,7 @@
 
 extern __forceinline void Sampler_get_intersection(vec3 v0, vec3 v1, float s0, float s1, float isolevel, vec3 out);
 extern __forceinline float SurfaceFn_sphere(float x, float y, float z, float w, struct osn_context* osn_context);
+extern __forceinline float SurfaceFn_sphere_sliced(float x, float y, float z, float w, struct osn_context* osn_context);
 extern __forceinline float SurfaceD_sphere(float x, float y, float z, float w, struct osn_context* osn_context);
 extern __forceinline float SurfaceD_torus_z(float x, float y, float z, float w, struct osn_context* osn_context);
 extern __forceinline float SurfaceD_plane(float x, float y, float z, float w, struct osn_context* osn_context);

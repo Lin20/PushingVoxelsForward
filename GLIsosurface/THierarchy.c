@@ -121,7 +121,7 @@ void THierarchy_init(struct THierarchy* dest, int t_resolution)
 		TDiamondStorage_add_tetrahedron(&dest->diamonds, &dest->top_level[i]);
 	}
 
-	vec3 view_pos = { 0, 0, 0 };
+	vec3 view_pos = { 0, 115.2f, 0 };
 	THierarchy_split_first(dest, view_pos);
 	_THierarchy_update_leaves(dest);
 	THierarchy_extract_all_leaves(dest);
@@ -307,7 +307,7 @@ void THierarchy_extract_all_leaves(struct THierarchy* dest)
 	uint32_t v_count = 0, p_count = 0;
 	struct TetrahedronNode* next_node = dest->first_leaf;
 
-	while (safety_counter++ < 25000 && next_node)
+	while (safety_counter++ < 50000 && next_node)
 	{
 		leaf_counter++;
 		TetrahedronNode_extract(next_node, &v_count, &p_count, dest->pem, dest->snap_threshold, dest->osn);
@@ -319,7 +319,7 @@ void THierarchy_extract_all_leaves(struct THierarchy* dest)
 	double delta = clock() - start_clock;
 	dest->last_extract_time = (int)(delta / (double)CLOCKS_PER_SEC * 1000.0);
 
-	if (safety_counter < 25000)
+	if (safety_counter < 50000)
 	{
 		printf("done (%i ms)\n%i verts, %i prims.\n\n", dest->last_extract_time, v_count, p_count / 3);
 		assert(leaf_counter == dest->leaf_count);
@@ -343,12 +343,12 @@ int _THierarchy_enqueue_split(struct THierarchy* dest, struct TetrahedronNode* t
 
 	dest->splits.queue[dest->splits.next++] = t;
 	return 0;
-}
+} 
 
 int _THierarchy_needs_split(struct TetrahedronNode* t, vec3 v, int tetra_resolution)
 {
 	//return 0;
-	if (t->level < 6)
+	if (t->level < 20)
 	{
 		float a = 1.0f;
 		float b = 2.0f;

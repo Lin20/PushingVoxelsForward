@@ -22,6 +22,15 @@ __forceinline float SurfaceFn_sphere(float x, float y, float z, float w, struct 
 	return x * x + y * y + z * z - r * r;
 }
 
+float SurfaceFn_sphere_sliced(float x, float y, float z, float w, struct osn_context* osn_context)
+{
+	const float r1 = Sampler_world_size * 0.45f;
+	const float r2 = Sampler_world_size * 0.25f;
+	float f1 = x * x + y * y + z * z - r1 * r1;
+	float f2 = x * x + y * y + z * z - r2 * r2;
+	return max(f1, -f2);
+}
+
 __forceinline float SurfaceD_sphere(float x, float y, float z, float w, struct osn_context* osn_context)
 {
 	const float r = Sampler_world_size * 0.45f;
