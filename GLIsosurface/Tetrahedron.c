@@ -223,7 +223,7 @@ int TetrahedronNode_is_leaf(struct TetrahedronNode* t)
 	return t->children[0] == 0 && t->children[1] == 0;
 }
 
-uint32_t TetrahedronNode_extract(struct TetrahedronNode* t, uint32_t* v_count, uint32_t* p_count, int pem, float threshold, struct osn_context* osn)
+uint32_t TetrahedronNode_extract(struct TetrahedronNode* t, uint32_t* v_count, uint32_t* p_count, int pem, float threshold, struct osn_context* osn, int sub_resolution)
 {
 	int return_code = 0;
 	vec3* out_vertices = malloc(4096 * sizeof(vec3));
@@ -244,10 +244,10 @@ uint32_t TetrahedronNode_extract(struct TetrahedronNode* t, uint32_t* v_count, u
 	if (!t->hex_init)
 	{
 		t->hex_init = 1;
-		Hexahedron_init(&t->hexahedra[0], t->vertices, 0, (t->branch & 1) == 0, pem, threshold);
-		Hexahedron_init(&t->hexahedra[1], t->vertices, 1, (t->branch & 1) == 1, pem, threshold);
-		Hexahedron_init(&t->hexahedra[2], t->vertices, 2, (t->branch & 1) == 0, pem, threshold);
-		Hexahedron_init(&t->hexahedra[3], t->vertices, 3, (t->branch & 1) == 1, pem, threshold);
+		Hexahedron_init(&t->hexahedra[0], t->vertices, 0, (t->branch & 1) == 0, pem, threshold, sub_resolution);
+		Hexahedron_init(&t->hexahedra[1], t->vertices, 1, (t->branch & 1) == 1, pem, threshold, sub_resolution);
+		Hexahedron_init(&t->hexahedra[2], t->vertices, 2, (t->branch & 1) == 0, pem, threshold, sub_resolution);
+		Hexahedron_init(&t->hexahedra[3], t->vertices, 3, (t->branch & 1) == 1, pem, threshold, sub_resolution);
 	}
 	else
 	{

@@ -46,7 +46,9 @@ struct THierarchy
 	float snap_threshold;
 	uint32_t vertex_count;
 	int max_depth;
+	int sub_resolution;
 	int leaf_count;
+	vec3 focus_point;
 	uint32_t v_count;
 	uint32_t p_count;
 	uint32_t last_extract_time;
@@ -81,8 +83,9 @@ void THierarchy_create_outline(struct THierarchy* dest);
 void THierarchy_split_first(struct THierarchy* dest, vec3 view_pos);
 void THierarchy_check_split(struct THierarchy* dest, struct TetrahedronNode* t, vec3 view_pos);
 void THierarchy_split_diamond(struct THierarchy* dest, struct TVec3DictionaryEntry* diamond);
+void THierarchy_extract_tree(struct THierarchy* dest);
 void THierarchy_extract_all_leaves(struct THierarchy* dest);
 
 int _THierarchy_enqueue_split(struct THierarchy* dest, struct TetrahedronNode* t);
-int _THierarchy_needs_split(struct TetrahedronNode* t, vec3 v, int tetra_resolution);
+int _THierarchy_needs_split(struct TetrahedronNode* t, vec3 v, int tetra_resolution, int max_depth);
 void _THierarchy_update_leaves(struct THierarchy* dest);

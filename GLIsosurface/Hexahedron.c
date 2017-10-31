@@ -3,9 +3,7 @@
 #include "Util.h"
 #include "Options.h"
 
-#define CHUNK_SIZE 7
-
-void Hexahedron_init(struct Hexahedron* h, vec3 t_verts[4], int index, int flip, int pem, float threshold)
+void Hexahedron_init(struct Hexahedron* h, vec3 t_verts[4], int index, int flip, int pem, float threshold, int sub_resolution)
 {
 	for (int i = 0; i < 8; i++)
 	{
@@ -24,7 +22,7 @@ void Hexahedron_init(struct Hexahedron* h, vec3 t_verts[4], int index, int flip,
 		vec3_copy(v, h->corner_verts[(flip ? (i ^ 1) : i)]);
 	}
 
-	UMC_Chunk_init(&h->chunk, CHUNK_SIZE, 1, pem, threshold);
+	UMC_Chunk_init(&h->chunk, sub_resolution, 1, pem, threshold);
 }
 
 void Hexahedron_destroy(struct Hexahedron* h)

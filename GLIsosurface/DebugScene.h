@@ -11,8 +11,13 @@
 
 struct DebugScene
 {
+	int last_space : 1;
+	int outline_visible : 1;
 	int fillmode;
 	float line_width;
+	float line_color[4];
+	float fill_color[4];
+	float clear_color[4];
 	GLuint points_vbo;
 	GLuint colors_vbo;
 	GLuint vao;

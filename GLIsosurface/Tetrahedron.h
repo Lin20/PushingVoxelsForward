@@ -47,4 +47,4 @@ void TetrahedronNode_destroy(struct TetrahedronNode* t);
 int TetrahedronNode_split(struct TetrahedronNode* t, struct TDiamondStorage* storage);
 int TetrahedronNode_add_outline(struct TetrahedronNode* out, vec3** out_verts, uint32_t** out_inds, uint32_t* v_next, uint32_t* v_size, uint32_t* i_next, uint32_t* i_size);
 int TetrahedronNode_is_leaf(struct TetrahedronNode* t);
-int TetrahedronNode_extract(struct TetrahedronNode* t, uint32_t* v_count, uint32_t* p_count, int pem, float threshold, struct osn_context* osn);
+int TetrahedronNode_extract(struct TetrahedronNode* t, uint32_t* v_count, uint32_t* p_count, int pem, float threshold, struct osn_context* osn, int sub_resolution);

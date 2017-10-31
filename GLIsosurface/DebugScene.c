@@ -29,8 +29,25 @@ void abbreviate_int(int d, int* i_out, char* c_out);
 int DebugScene_init(struct DebugScene* out, struct RenderInput* render_input)
 {
 	memset(out, 0, sizeof(struct DebugScene));
+	out->last_space = 0;
+	out->outline_visible = 0;
 	out->fillmode = FILL_MODE_BOTH;
 	out->line_width = 1.5f;
+
+	out->fill_color[0] = 0.0f;
+	out->fill_color[1] = 0.0f;
+	out->fill_color[2] = 0.05f;
+	out->fill_color[3] = 1.0f;
+
+	out->line_color[0] = 1.0f;
+	out->line_color[1] = 0.6f;
+	out->line_color[2] = 0.0f;
+	out->line_color[3] = 1.0f;
+
+	out->clear_color[0] = 0.02f;
+	out->clear_color[1] = 0.02f;
+	out->clear_color[2] = 0.1f;
+	out->clear_color[3] = 1.0f;
 
 	float dx[] = { 0, 1, 0, 1, 0, 1, 0, 1 };
 	float dy[] = { 0, 0, 1, 1, 0, 0, 1, 1 };
@@ -193,18 +210,17 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 {
 	if (glfwGetKey(input->window, GLFW_KEY_SPACE))
 	{
-		/*float timer = scene->test_chunk.timer;
-		UMC_Chunk_destroy(&scene->test_chunk);
-		UMC_Chunk_init(&scene->test_chunk, 63, 1, 1);
-		scene->test_chunk.timer = timer;*/
-		if (glfwGetKey(input->window, GLFW_KEY_LEFT_SHIFT))
-			scene->test_chunk.timer += 0.1f;
-		else
-			scene->test_chunk.timer += 0.01f;
-		//UMC_Chunk_run(&scene->test_chunk, 0, 0,);
+		if (!scene->last_space)
+		{
+			vec3_copy(scene->camera.position, scene->hierarchy.focus_point);
+			THierarchy_extract_tree(&scene->hierarchy);
+		}
+		scene->last_space = 1;
 	}
+	else
+		scene->last_space = 0;
 
-	glClearColor(0.02f, 0.02f, 0.1f, 1.0f);
+	glClearColor(scene->clear_color[0], scene->clear_color[1], scene->clear_color[2], scene->clear_color[3]);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	glUseProgram(scene->shader_program);
@@ -216,7 +232,7 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 		glEnable(GL_POLYGON_OFFSET_FILL);
 		glPolygonOffset(1.0f, 1);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-		glUniform3f(scene->shader_mul_clr, 0.0f, 0.0f, 0.05f);
+		glUniform3f(scene->shader_mul_clr, scene->fill_color[0], scene->fill_color[1], scene->fill_color[2]);
 
 		uint32_t safety_counter = 0;
 		struct TetrahedronNode* next_node = scene->hierarchy.first_leaf;
@@ -247,7 +263,7 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 	{
 		glLineWidth(scene->line_width);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-		glUniform3f(scene->shader_mul_clr, 1.0f, 0.6f, 0);
+		glUniform3f(scene->shader_mul_clr, scene->line_color[0], scene->line_color[1], scene->line_color[2]);
 
 		uint32_t safety_counter = 0;
 		struct TetrahedronNode* next_node = scene->hierarchy.first_leaf;
@@ -263,18 +279,22 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 		}
 	}
 
-	glUseProgram(scene->outline_sp);
-	FPSCamera_set_shader(&scene->camera, scene->outline_shader_projection, scene->outline_shader_view);
-	glBindVertexArray(scene->hierarchy.outline_vao);
+	if (scene->outline_visible)
+	{
+		glLineWidth(1.0f);
+		glPolygonOffset(0.0f, GL_POLYGON_OFFSET_LINE);
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		glUniform3f(scene->shader_mul_clr, 1, 1, 1);
+		glBindVertexArray(scene->hierarchy.outline_vao);
+		glDrawElements(GL_LINES, scene->hierarchy.outline_p_count, GL_UNSIGNED_INT, 0);
+	}
+
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-	glUniform3f(scene->outline_shader_mul_clr, 1, 0.9f, 0.1f);
-	glPointSize(3.0f);
-	//glDrawElements(GL_LINES, scene->hierarchy.outline_p_count, GL_UNSIGNED_INT, 0);
 
 	glfwPollEvents();
 
 	nk_glfw3_new_frame();
-	if (nk_begin(scene->nkc, "Options", nk_rect(50, 50, 300, 330),
+	if (nk_begin(scene->nkc, "Options", nk_rect(50, 50, 300, 515),
 		NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE |
 		NK_WINDOW_MINIMIZABLE | NK_WINDOW_TITLE))
 	{
@@ -304,7 +324,7 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 			nk_group_end(scene->nkc);
 		}
 
-		nk_layout_row_dynamic(scene->nkc, 74, 1);
+		nk_layout_row_dynamic(scene->nkc, 172, 1);
 		if (nk_group_begin(scene->nkc, "View", 0))
 		{
 			nk_layout_row_dynamic(scene->nkc, 14, 1);
@@ -314,14 +334,63 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 			sprintf(lbl, "Pos: %.2f, %.2f, %.2f", scene->camera.position[0], scene->camera.position[1], scene->camera.position[2]);
 			nk_label(scene->nkc, lbl, NK_TEXT_LEFT);
 
+
+			nk_layout_row_dynamic(scene->nkc, 20, 1);
+			scene->outline_visible = nk_option_label(scene->nkc, "Tree Outline", scene->outline_visible);
+
+			nk_layout_row_dynamic(scene->nkc, 20, 1);
+			if (nk_option_label(scene->nkc, "Wireframe", scene->fillmode == FILL_MODE_BOTH))
+				scene->fillmode = FILL_MODE_BOTH;
+			else
+				scene->fillmode = FILL_MODE_FILL;
+
 			nk_layout_row_dynamic(scene->nkc, 20, 2);
 			nk_value_float(scene->nkc, "Line Width", scene->line_width);
 			nk_slider_float(scene->nkc, 1.0f, &scene->line_width, 5.0f, 0.5f);
 
+			// Line color
+			struct nk_color clr = { (nk_byte)(255.0f * scene->line_color[0]), (nk_byte)(255.0f * scene->line_color[1]), (nk_byte)(255.0f * scene->line_color[2]), (nk_byte)(255.0f * scene->line_color[3]) };
+			nk_layout_row_dynamic(scene->nkc, 20, 2);
+			nk_label_colored(scene->nkc, "Line Color", NK_TEXT_LEFT, clr);
+			if (nk_combo_begin_text(scene->nkc, "Select", 6, nk_vec2(200, 400)))
+			{
+				nk_layout_row_dynamic(scene->nkc, 120, 1);
+				clr = nk_color_picker(scene->nkc, clr, 0);
+				nk_color_fv(scene->line_color, clr);
+
+				nk_combo_end(scene->nkc);
+			}
+
+			// Fill color
+			struct nk_color clr2 = { (nk_byte)(255.0f * scene->fill_color[0]), (nk_byte)(255.0f * scene->fill_color[1]), (nk_byte)(255.0f * scene->fill_color[2]), (nk_byte)(255.0f * scene->fill_color[3]) };
+			nk_layout_row_dynamic(scene->nkc, 20, 2);
+			nk_label_colored(scene->nkc, "Fill Color", NK_TEXT_LEFT, clr2);
+			if (nk_combo_begin_text(scene->nkc, "Select", 6, nk_vec2(200, 400)))
+			{
+				nk_layout_row_dynamic(scene->nkc, 120, 1);
+				clr2 = nk_color_picker(scene->nkc, clr2, 0);
+				nk_color_fv(scene->fill_color, clr2);
+
+				nk_combo_end(scene->nkc);
+			}
+
+			// Clear color
+			struct nk_color clr3 = { (nk_byte)(255.0f * scene->clear_color[0]), (nk_byte)(255.0f * scene->clear_color[1]), (nk_byte)(255.0f * scene->clear_color[2]), (nk_byte)(255.0f * scene->clear_color[3]) };
+			nk_layout_row_dynamic(scene->nkc, 20, 2);
+			nk_label_colored(scene->nkc, "Clear Color", NK_TEXT_LEFT, clr3);
+			if (nk_combo_begin_text(scene->nkc, "Select", 6, nk_vec2(200, 400)))
+			{
+				nk_layout_row_dynamic(scene->nkc, 120, 1);
+				clr3 = nk_color_picker(scene->nkc, clr3, 0);
+				nk_color_fv(scene->clear_color, clr3);
+
+				nk_combo_end(scene->nkc);
+			}
+
 			nk_group_end(scene->nkc);
 		}
 
-		nk_layout_row_dynamic(scene->nkc, 64, 1);
+		nk_layout_row_dynamic(scene->nkc, 128, 1);
 		if (nk_group_begin(scene->nkc, "Snapping", 0))
 		{
 			nk_layout_row_dynamic(scene->nkc, 20, 1);
@@ -330,6 +399,17 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 			nk_layout_row_dynamic(scene->nkc, 20, 2);
 			nk_value_float(scene->nkc, "Threshold", scene->hierarchy.snap_threshold);
 			nk_slider_float(scene->nkc, 0.0f, &scene->hierarchy.snap_threshold, 0.707f, 0.025f);
+
+			nk_layout_row_dynamic(scene->nkc, 20, 2);
+			nk_value_int(scene->nkc, "Max Depth", scene->hierarchy.max_depth);
+			nk_slider_int(scene->nkc, 0, &scene->hierarchy.max_depth, 55, 1);
+
+			nk_layout_row_dynamic(scene->nkc, 20, 2);
+			int sub_r_2 = (int)log2f(scene->hierarchy.sub_resolution + 1);
+			nk_value_int(scene->nkc, "Sub Res.", scene->hierarchy.sub_resolution);
+			nk_slider_int(scene->nkc, 1, &sub_r_2, 4, 1);
+			scene->hierarchy.sub_resolution = (int)powf(2, sub_r_2) - 1;
+
 			nk_group_end(scene->nkc);
 		}
 

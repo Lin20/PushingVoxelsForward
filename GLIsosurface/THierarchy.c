@@ -94,7 +94,8 @@ void THierarchy_init(struct THierarchy* dest, int t_resolution)
 	int size = 1 << t_resolution;
 	dest->t_resolution = t_resolution;
 	dest->size = size;
-	dest->max_depth = 0;
+	dest->max_depth = MAX_TREE_DEPTH;
+	dest->sub_resolution = DEFAULT_SUB_RESOLUTION;
 	dest->leaf_count = 0;
 	dest->first_leaf = 0;
 	dest->last_leaf = 0;
@@ -121,8 +122,9 @@ void THierarchy_init(struct THierarchy* dest, int t_resolution)
 		TDiamondStorage_add_tetrahedron(&dest->diamonds, &dest->top_level[i]);
 	}
 
-	vec3 view_pos = { 0, 115.2f, 0 };
-	THierarchy_split_first(dest, view_pos);
+	vec3 focus = DEFAULT_FOCUS_POS;
+	vec3_copy(focus, dest->focus_point);
+	THierarchy_split_first(dest, dest->focus_point);
 	_THierarchy_update_leaves(dest);
 	THierarchy_extract_all_leaves(dest);
 }
@@ -254,7 +256,7 @@ void THierarchy_split_first(struct THierarchy* dest, vec3 view_pos)
 
 void THierarchy_check_split(struct THierarchy* dest, struct TetrahedronNode* t, vec3 view_pos)
 {
-	if (_THierarchy_needs_split(t, view_pos, dest->t_resolution))
+	if (_THierarchy_needs_split(t, view_pos, dest->t_resolution, dest->max_depth))
 	{
 		struct TVec3DictionaryEntry entry;
 		entry.hash = vec3_hash(t->refinement_key);
@@ -297,6 +299,39 @@ void THierarchy_split_diamond(struct THierarchy* dest, struct TVec3DictionaryEnt
 	}
 }
 
+void THierarchy_extract_tree(struct THierarchy* dest)
+{
+	dest->first_leaf = 0;
+	dest->last_extract_time = 0;
+	dest->leaf_count = 0;
+
+	uint32_t safety_counter = 0;
+	struct TetrahedronNode* next_node = dest->first_leaf;
+
+	while (safety_counter++ < 50000 && next_node)
+	{
+		TetrahedronNode_destroy(next_node);
+		next_node = next_node->next;
+	}
+	TVec3DictionaryDestroy(&dest->diamonds);
+
+	TDiamondStorage_init(&dest->diamonds);
+
+	vec3 start;
+	vec3_set(start, (float)dest->size * -0.5f, (float)dest->size * -0.5f, (float)dest->size * -0.5f);
+	for (int i = 0; i < 6; i++)
+	{
+		TetrahedronNode_init_top_level(&dest->top_level[i], i, dest->size, start);
+		TDiamondStorage_add_tetrahedron(&dest->diamonds, &dest->top_level[i]);
+	}
+
+	THierarchy_split_first(dest, dest->focus_point);
+	_THierarchy_update_leaves(dest);
+	THierarchy_extract_all_leaves(dest);
+
+	THierarchy_create_outline(dest);
+}
+
 void THierarchy_extract_all_leaves(struct THierarchy* dest)
 {
 	printf("Extracting mesh on %i leaves...", dest->leaf_count);
@@ -310,7 +345,7 @@ void THierarchy_extract_all_leaves(struct THierarchy* dest)
 	while (safety_counter++ < 50000 && next_node)
 	{
 		leaf_counter++;
-		TetrahedronNode_extract(next_node, &v_count, &p_count, dest->pem, dest->snap_threshold, dest->osn);
+		TetrahedronNode_extract(next_node, &v_count, &p_count, dest->pem, dest->snap_threshold, dest->osn, dest->sub_resolution);
 		v_count += next_node->v_count;
 		p_count += next_node->p_count;
 		next_node = next_node->next;
@@ -345,10 +380,10 @@ int _THierarchy_enqueue_split(struct THierarchy* dest, struct TetrahedronNode* t
 	return 0;
 } 
 
-int _THierarchy_needs_split(struct TetrahedronNode* t, vec3 v, int tetra_resolution)
+int _THierarchy_needs_split(struct TetrahedronNode* t, vec3 v, int tetra_resolution, int max_depth)
 {
 	//return 0;
-	if (t->level < 20)
+	if (t->level < max_depth)
 	{
 		float a = 1.0f;
 		float b = 2.0f;
@@ -389,6 +424,8 @@ void _THierarchy_update_leaves(struct THierarchy* dest)
 			}
 		}
 	}
+
+	dest->splits.next = 0;
 
 	printf("Updated leaves (%i).\n", dest->leaf_count);
 }
