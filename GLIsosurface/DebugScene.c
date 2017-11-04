@@ -31,12 +31,13 @@ int DebugScene_init(struct DebugScene* out, struct RenderInput* render_input)
 	memset(out, 0, sizeof(struct DebugScene));
 	out->last_space = 0;
 	out->outline_visible = 0;
-	out->fillmode = FILL_MODE_BOTH;
+	out->smooth_shading = SMOOTH_NORMALS;
+	out->fillmode = FILL_MODE_FILL;
 	out->line_width = 1.5f;
 
-	out->fill_color[0] = 0.0f;
-	out->fill_color[1] = 0.0f;
-	out->fill_color[2] = 0.05f;
+	out->fill_color[0] = 1.0f;
+	out->fill_color[1] = 1.0f;
+	out->fill_color[2] = 1.00f;
 	out->fill_color[3] = 1.0f;
 
 	out->line_color[0] = 1.0f;
@@ -44,9 +45,9 @@ int DebugScene_init(struct DebugScene* out, struct RenderInput* render_input)
 	out->line_color[2] = 0.0f;
 	out->line_color[3] = 1.0f;
 
-	out->clear_color[0] = 0.02f;
-	out->clear_color[1] = 0.02f;
-	out->clear_color[2] = 0.1f;
+	out->clear_color[0] = 0.0f;
+	out->clear_color[1] = 0.05f;
+	out->clear_color[2] = 1.0f;
 	out->clear_color[3] = 1.0f;
 
 	float dx[] = { 0, 1, 0, 1, 0, 1, 0, 1 };
@@ -91,12 +92,18 @@ int DebugScene_init(struct DebugScene* out, struct RenderInput* render_input)
 		"attribute vec3 vertex_normal;"
 		"uniform mat4 projection;"
 		"uniform mat4 view;"
+		"uniform vec3 eye_pos;"
 		"uniform vec3 mul_color;"
+		"uniform int smooth_shading;"
 		"out vec3 f_normal;"
 		"out vec3 f_mul_color;"
+		"out vec3 f_ec_pos;"
+		"out int f_smooth_shading;"
 		"void main() {"
 		"  f_normal = normalize(vertex_normal);"
 		"  f_mul_color = mul_color;"
+		"  f_smooth_shading = smooth_shading;"
+		"  f_ec_pos = (view * vec4(vertex_position, 1)).xyz;"
 		"  gl_Position = projection * view * vec4(vertex_position, 1);"
 		"}";
 
@@ -104,9 +111,16 @@ int DebugScene_init(struct DebugScene* out, struct RenderInput* render_input)
 		"#version 400\n"
 		"in vec3 f_normal;"
 		"in vec3 f_mul_color;"
+		"in vec3 f_ec_pos;"
+		"flat in int f_smooth_shading;"
 		"out vec4 frag_color;"
 		"void main() {"
-		"  float d = dot(normalize(-vec3(0.1f, -1.0f, 0.5f)), f_normal);"
+		"  vec3 normal;"
+		"  if (f_smooth_shading)"
+		"    normal = f_normal;"
+		"  else"
+		"    normal = normalize(cross(dFdx(f_ec_pos), dFdy(f_ec_pos)));"
+		"  float d = dot(normalize(-vec3(0.1f, -1.0f, 0.5f)), normal);"
 		"  float m = mix(0.2f, 1.0f, d * 0.5f + 0.5f);"
 		"  float s = pow(max(0.0f, d), 32.0f);"
 		"  vec3 color = vec3(0.3f, 0.3f, 0.5f);"
@@ -135,12 +149,20 @@ int DebugScene_init(struct DebugScene* out, struct RenderInput* render_input)
 		"  frag_color = vec4(f_mul_color, 1.0f);"
 		"}";
 
+	GLuint success;
 	out->vertex_shader = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(out->vertex_shader, 1, &vertex_shader, NULL);
 	glCompileShader(out->vertex_shader);
+	glGetShaderiv(out->vertex_shader, GL_COMPILE_STATUS, &success);
+	if (success == GL_FALSE)
+		printf("Failed to compile regular vs.\n");
+
 	out->fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
 	glShaderSource(out->fragment_shader, 1, &fragment_shader, NULL);
 	glCompileShader(out->fragment_shader);
+	glGetShaderiv(out->fragment_shader, GL_COMPILE_STATUS, &success);
+	if (success == GL_FALSE)
+		printf("Failed to compile regular fs.\n");
 
 	out->shader_program = glCreateProgram();
 	glAttachShader(out->shader_program, out->fragment_shader);
@@ -153,6 +175,8 @@ int DebugScene_init(struct DebugScene* out, struct RenderInput* render_input)
 	out->shader_projection = glGetUniformLocation(out->shader_program, "projection");
 	out->shader_view = glGetUniformLocation(out->shader_program, "view");
 	out->shader_mul_clr = glGetUniformLocation(out->shader_program, "mul_color");
+	out->shader_eye_pos = glGetUniformLocation(out->shader_program, "eye_pos");
+	out->shader_smooth_shading = glGetUniformLocation(out->shader_program, "smooth_shading");
 
 	out->outline_vs = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(out->outline_vs, 1, &outline_vs, NULL);
@@ -222,6 +246,7 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 
 	glClearColor(scene->clear_color[0], scene->clear_color[1], scene->clear_color[2], scene->clear_color[3]);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glUniform3fv(scene->shader_eye_pos, 3, scene->camera.position);
 
 	glUseProgram(scene->shader_program);
 	FPSCamera_set_shader(&scene->camera, scene->shader_projection, scene->shader_view);
@@ -232,7 +257,10 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 		glEnable(GL_POLYGON_OFFSET_FILL);
 		glPolygonOffset(1.0f, 1);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+		glEnable(GL_CULL_FACE);
+		glCullFace(GL_FRONT);
 		glUniform3f(scene->shader_mul_clr, scene->fill_color[0], scene->fill_color[1], scene->fill_color[2]);
+		glUniform1i(scene->shader_smooth_shading, scene->smooth_shading);
 
 		uint32_t safety_counter = 0;
 		struct TetrahedronNode* next_node = scene->hierarchy.first_leaf;
@@ -263,7 +291,9 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 	{
 		glLineWidth(scene->line_width);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		glDisable(GL_CULL_FACE);
 		glUniform3f(scene->shader_mul_clr, scene->line_color[0], scene->line_color[1], scene->line_color[2]);
+		glUniform1i(scene->shader_smooth_shading, 1);
 
 		uint32_t safety_counter = 0;
 		struct TetrahedronNode* next_node = scene->hierarchy.first_leaf;
@@ -287,6 +317,7 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 		glUniform3f(scene->shader_mul_clr, 1, 1, 1);
 		glBindVertexArray(scene->hierarchy.outline_vao);
 		glDrawElements(GL_LINES, scene->hierarchy.outline_p_count, GL_UNSIGNED_INT, 0);
+		glBindVertexArray(0);
 	}
 
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -294,7 +325,7 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 	glfwPollEvents();
 
 	nk_glfw3_new_frame();
-	if (nk_begin(scene->nkc, "Options", nk_rect(50, 50, 300, 515),
+	if (nk_begin(scene->nkc, "Options", nk_rect(50, 50, 300, 535),
 		NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE |
 		NK_WINDOW_MINIMIZABLE | NK_WINDOW_TITLE))
 	{
@@ -324,7 +355,7 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 			nk_group_end(scene->nkc);
 		}
 
-		nk_layout_row_dynamic(scene->nkc, 172, 1);
+		nk_layout_row_dynamic(scene->nkc, 218, 1);
 		if (nk_group_begin(scene->nkc, "View", 0))
 		{
 			nk_layout_row_dynamic(scene->nkc, 14, 1);
@@ -343,6 +374,9 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 				scene->fillmode = FILL_MODE_BOTH;
 			else
 				scene->fillmode = FILL_MODE_FILL;
+
+			nk_layout_row_dynamic(scene->nkc, 20, 1);
+			scene->smooth_shading = nk_option_label(scene->nkc, "Smooth Shading", scene->smooth_shading);
 
 			nk_layout_row_dynamic(scene->nkc, 20, 2);
 			nk_value_float(scene->nkc, "Line Width", scene->line_width);
@@ -390,7 +424,7 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 			nk_group_end(scene->nkc);
 		}
 
-		nk_layout_row_dynamic(scene->nkc, 128, 1);
+		nk_layout_row_dynamic(scene->nkc, 110, 1);
 		if (nk_group_begin(scene->nkc, "Snapping", 0))
 		{
 			nk_layout_row_dynamic(scene->nkc, 20, 1);
@@ -416,7 +450,8 @@ int DebugScene_render(struct DebugScene* scene, struct RenderInput* input)
 		nk_layout_row_dynamic(scene->nkc, 30, 1);
 		if (nk_button_text(scene->nkc, "Extract all", 11))
 		{
-			THierarchy_extract_all_leaves(&scene->hierarchy);
+			//THierarchy_extract_all_leaves(&scene->hierarchy);
+			THierarchy_extract_tree(&scene->hierarchy);
 		}
 	}
 	nk_end(scene->nkc);

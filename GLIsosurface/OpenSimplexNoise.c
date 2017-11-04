@@ -2390,3 +2390,43 @@ double open_simplex_noise4(struct osn_context *ctx, double x, double y, double z
 
 	return value / NORM_CONSTANT_4D;
 }
+
+double open_simplex_noise2_oct(struct osn_context *ctx, double x, double y, int octaves, float pers)
+{
+	float max_amp = 0;
+	float amp = 1;
+	float noise = 0;
+	float freq = 1.0f;
+
+	for (int i = 0; i < octaves; i++)
+	{
+		noise += open_simplex_noise2(ctx, x * freq, y * freq) * amp;
+		max_amp += amp;
+		amp *= pers;
+		freq *= 2.0f;
+	}
+
+	noise /= max_amp;
+
+	return noise;
+}
+
+double open_simplex_noise3_oct(struct osn_context* ctx, double x, double y, double z, int octaves, float pers)
+{
+	float max_amp = 0;
+	float amp = 1;
+	float noise = 0;
+	float freq = 1.0f;
+
+	for (int i = 0; i < octaves; i++)
+	{
+		noise += open_simplex_noise3(ctx, x * freq, y * freq, z * freq) * amp;
+		max_amp += amp;
+		amp *= pers;
+		freq *= 2.0f;
+	}
+
+	noise /= max_amp;
+
+	return noise;
+}

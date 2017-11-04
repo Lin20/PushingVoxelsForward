@@ -13,6 +13,7 @@ struct DebugScene
 {
 	int last_space : 1;
 	int outline_visible : 1;
+	int smooth_shading : 1;
 	int fillmode;
 	float line_width;
 	float line_color[4];
@@ -34,6 +35,8 @@ struct DebugScene
 	GLuint shader_projection;
 	GLuint shader_view;
 	GLuint shader_mul_clr;
+	GLuint shader_eye_pos;
+	GLuint shader_smooth_shading;
 
 	GLuint outline_shader_projection;
 	GLuint outline_shader_view;

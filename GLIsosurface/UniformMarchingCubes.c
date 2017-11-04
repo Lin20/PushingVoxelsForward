@@ -16,6 +16,9 @@
 #define EDGE_Y 1
 #define EDGE_Z 2
 
+// SnapMC tables aren't properly always oriented, so we can compare against the gradient normals to determine if flipping is necessary
+#define DYNAMIC_FACE_REPORTING 0
+
 #define USE_MORTON_CODING 0
 #define ENCODE3D(x,y,z,dp1) (USE_MORTON_CODING ? GetMortonCode((x),(y),(z)) : INDEX3D(x,y,z,dp1))
 
@@ -39,14 +42,14 @@ if (next_index == out_ind_size) \
 out_indexes[next_index++] = index3d;
 
 #define SNAPMC_EDGE_CHECK(x, y, z, i) \
-e = edges[INDEX3D(x, y, z, dim + 1) * 3 + i]; \
-if (e.grid_v0 != e.grid_v1 && e.length > 0.0f) \
+e = &edges[INDEX3D(x, y, z, dim + 1) * 3 + i]; \
+if (e->grid_v0 != e->grid_v1 && e->length > 0.0f && !e->snapped) \
 { \
-	assert(e.grid_v0 == v_index || e.grid_v1 == v_index); \
-	assert(e.length > 0.0f); \
-	if (e.length > max_length) \
-		max_length = e.length; \
-	distance = vec3_distance(e.iso_vertex.position, v->position) / e.length; \
+	assert(e->grid_v0 == v_index || e->grid_v1 == v_index); \
+	assert(e->length > 0.0f); \
+	if (e->length > max_length) \
+		max_length = e->length; \
+	distance = vec3_distance(e->iso_vertex.position, v->position) / e->length; \
 	if (distance < min_distance) \
 	{ \
 		min_distance = distance; \
@@ -56,7 +59,7 @@ if (e.grid_v0 != e.grid_v1 && e.length > 0.0f) \
 
 typedef uint32_t COORD_TYPE;
 
-const float(*sampler_fn)(float x, float y, float z, float w, struct osn_context* osn) = &SurfaceFn_sphere;
+const float(*sampler_fn)(float x, float y, float z, float w, struct osn_context* osn) = &SurfaceFn_windy;
 
 void UMC_Chunk_init(struct UMC_Chunk* dest, uint32_t dim, int index_primitives, int use_pem, float threshold)
 {
@@ -197,7 +200,7 @@ void UMC_Chunk_run(struct UMC_Chunk* chunk, vec3* corner_verts, int silent, stru
 			printf("done (%i ms)\n-Polygonize...", (int)(temp / (double)CLOCKS_PER_SEC * 1000.0));
 
 		start_clock = clock();
-		_UMC_Chunk_polygonize(chunk);
+		_UMC_Chunk_polygonize(chunk, *chunk->v_out, osn);
 		temp = clock() - start_clock;
 		total_ms += temp;
 		/*if (!silent)
@@ -576,8 +579,8 @@ void _UMC_Chunk_snap_verts(struct UMC_Chunk* chunk, vec3** out_vertices, vec3** 
 		float min_distance = 3.4e37f;
 		float distance;
 		float max_length = 0;
-		struct UMC_Edge e;
-		struct UMC_Edge min_edge;
+		struct UMC_Edge* e;
+		struct UMC_Edge* min_edge;
 
 		SNAPMC_EDGE_CHECK(x, y, z, 0);
 		SNAPMC_EDGE_CHECK(x, y, z, 1);
@@ -586,14 +589,21 @@ void _UMC_Chunk_snap_verts(struct UMC_Chunk* chunk, vec3** out_vertices, vec3** 
 		SNAPMC_EDGE_CHECK(x, y - 1, z, 1);
 		SNAPMC_EDGE_CHECK(x, y, z - 1, 2);
 
-		if (min_distance <= snap_threshold)
+		if (min_distance < snap_threshold)
 		{
 			uint32_t lsh = (((z & 1) * 1) + ((y & 1) * 2) + ((x & 1) * 4)) * 2;
 			grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim_h)] &= ~(3 << lsh);
 			grid_signs[ENCODE3D(x >> 1, y >> 1, z >> 1, dim_h)] |= (1 << lsh);
-			vec3_copy(min_edge.iso_vertex.position, v->position);
+			vec3_copy(min_edge->iso_vertex.position, v->position);
+			v->index = min_edge->iso_vertex.index;
 
-			v->index = min_edge.iso_vertex.index;
+			edges[INDEX3D(x, y, z, dim + 1) * 3 + 0].snapped = 1;
+			edges[INDEX3D(x, y, z, dim + 1) * 3 + 1].snapped = 1;
+			edges[INDEX3D(x, y, z, dim + 1) * 3 + 2].snapped = 1;
+			edges[INDEX3D(x - 1, y, z, dim + 1) * 3 + 0].snapped = 1;
+			edges[INDEX3D(x, y - 1, z, dim + 1) * 3 + 1].snapped = 1;
+			edges[INDEX3D(x, y, z - 1, dim + 1) * 3 + 2].snapped = 1;
+
 			snapped_count++;
 		}
 	}
@@ -601,7 +611,7 @@ void _UMC_Chunk_snap_verts(struct UMC_Chunk* chunk, vec3** out_vertices, vec3** 
 	chunk->snapped_count = snapped_count;
 }
 
-void _UMC_Chunk_polygonize(struct UMC_Chunk* chunk)
+void _UMC_Chunk_polygonize(struct UMC_Chunk* chunk, vec3* positions, struct osn_context* osn)
 {
 	assert(chunk);
 	int pem = chunk->pem;
@@ -704,7 +714,7 @@ void _UMC_Chunk_polygonize(struct UMC_Chunk* chunk)
 					cell.iso_verts[8 + 11] = edge_v_indexes + INDEX3D(x, y + 1, z + 1, dim + 1) * 3 + EDGE_X;
 				}
 
-				_UMC_Chunk_gen_tris(&cell, out_indexes, next_index, out_size, pem);
+				_UMC_Chunk_gen_tris(positions, osn, &cell, out_indexes, next_index, out_size, pem);
 			}
 		}
 	}
@@ -823,7 +833,7 @@ __forceinline int _UMC_Chunk_calc_edge_isov(struct UMC_Chunk* chunk, struct UMC_
 	(*next_vertex)++;
 }
 
-inline void _UMC_Chunk_gen_tris(struct UMC_Cell* cell, uint32_t** out_indexes, uint32_t* next_index, uint32_t* out_size, int pem)
+inline void _UMC_Chunk_gen_tris(vec3* positions, struct osn_context* osn, struct UMC_Cell* cell, uint32_t** out_indexes, uint32_t* next_index, uint32_t* out_size, int pem)
 {
 	if (!pem)
 		assert(cell->mask > 0 && cell->mask < 255);
@@ -859,12 +869,52 @@ inline void _UMC_Chunk_gen_tris(struct UMC_Cell* cell, uint32_t** out_indexes, u
 			(*out_indexes)[*next_index] = *cell->iso_verts[ind];
 			(*next_index)++;
 		}
+
+		if (DYNAMIC_FACE_REPORTING)
+		{
+			for (int i = 1; i < count * 3 + 1; i += 3)
+			{
+				vec3 a, b, c;
+				vec3_copy(positions[*cell->iso_verts[MCPEM_Table[cell->mask][i]]], a);
+				vec3_copy(positions[*cell->iso_verts[MCPEM_Table[cell->mask][i+1]]], b);
+				vec3_copy(positions[*cell->iso_verts[MCPEM_Table[cell->mask][i+2]]], c);
+				
+				vec3 x, y;
+				glm_vec_sub(a, b, x);
+				glm_vec_sub(a, c, y);
+				vec3 n;
+				glm_vec_cross(y, x, n);
+				glm_vec_normalize(n);
+
+				vec3 middle = { 0,0,0 };
+				vec3_add_coeff(middle, a, middle, 0.333333f);
+				vec3_add_coeff(middle, b, middle, 0.333333f);
+				vec3_add_coeff(middle, c, middle, 0.333333f);
+
+				vec3 grad[3];
+				_UMC_get_grad(a[0], a[1], a[2], 0, grad[0], osn);
+				_UMC_get_grad(b[0], b[1], b[2], 0, grad[1], osn);
+				_UMC_get_grad(c[0], c[1], c[2], 0, grad[2], osn);
+				vec3 norm = { 0, 0, 0 };
+				vec3_add_coeff(norm, grad[0], norm, 0.333333f);
+				vec3_add_coeff(norm, grad[1], norm, 0.333333f);
+				vec3_add_coeff(norm, grad[2], norm, 0.333333f);
+				glm_vec_normalize(norm);
+
+				vec3 down = { 0,-1,0 };
+				float dot = glm_vec_dot(n, norm);
+				if (dot < -0.5f)
+				{
+					printf("Backwards tri found with mask %i sp %i at:\t%.2f,\t%.2f,\t%.2f\n", cell->mask, i, middle[0], middle[1], middle[2]);
+				}
+			}
+		}
 	}
 }
 
 inline void _UMC_get_grad(float x, float y, float z, float w, vec3 out, struct osn_context* osn)
 {
-	const float h = 0.1f;
+	const float h = 0.001f;
 	float dx = sampler_fn(x + h, y, z, w, osn) - sampler_fn(x - h, y, z, w, osn);
 	float dy = sampler_fn(x, y + h, z, w, osn) - sampler_fn(x, y - h, z, w, osn);
 	float dz = sampler_fn(x, y, z + h, w, osn) - sampler_fn(x, y, z - h, w, osn);

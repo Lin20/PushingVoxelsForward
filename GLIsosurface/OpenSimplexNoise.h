@@ -44,6 +44,9 @@ extern "C" {
 	double open_simplex_noise3(struct osn_context *ctx, double x, double y, double z);
 	double open_simplex_noise4(struct osn_context *ctx, double x, double y, double z, double w);
 
+	double open_simplex_noise2_oct(struct osn_context *ctx, double x, double y, int octaves, float pers);
+	double open_simplex_noise3_oct(struct osn_context *ctx, double x, double y, double z, int octaves, float pers);
+
 #ifdef __cplusplus
 }
 #endif

@@ -52,6 +52,7 @@ struct UMC_Chunk
 
 struct UMC_Edge
 {
+	int snapped : 1;
 	uint32_t grid_v0;
 	uint32_t grid_v1;
 	float length;
@@ -70,11 +71,11 @@ void UMC_Chunk_run(struct UMC_Chunk* chunk, vec3* corner_verts, int silent, stru
 void _UMC_Chunk_label_grid(struct UMC_Chunk* chunk, vec3* corner_verts, struct osn_context* osn);
 int _UMC_Chunk_label_edges(struct UMC_Chunk* chunk, int silent, struct osn_context* osn);
 void _UMC_Chunk_snap_verts(struct UMC_Chunk* chunk, vec3** out_vertices, vec3** out_normals, uint32_t* next_vertex, uint32_t* out_size, uint32_t* out_indexes, uint32_t out_index_size, float w, struct osn_context* osn);
-void _UMC_Chunk_polygonize(struct UMC_Chunk* chunk);
+void _UMC_Chunk_polygonize(struct UMC_Chunk* chunk, vec3* positions, struct osn_context* osn);
 void _UMC_Chunk_create_VAO(struct UMC_Chunk* chunk);
 extern __forceinline int _UMC_Chunk_calc_edge_crossing(uint32_t dim, uint16_t* grid_signs, uint32_t x0, uint32_t y0, uint32_t z0, uint32_t x1, uint32_t y1, uint32_t z1, uint32_t s0, int pem);
 extern __forceinline int _UMC_Chunk_calc_edge_isov(struct UMC_Chunk* chunk, struct UMC_Edge* edge, struct UMC_Isovertex* grid, uint32_t* edge_v, vec3** out_vertices, vec3** out_normals, uint32_t* next_vertex, uint32_t* out_size, float w, struct osn_context* osn);
-extern inline void _UMC_Chunk_gen_tris(struct UMC_Cell* cell, uint32_t** out_indexes, uint32_t* next_index, uint32_t* outsize, int pem);
+extern inline void _UMC_Chunk_gen_tris(vec3* positions, struct osn_context* osn, struct UMC_Cell* cell, uint32_t** out_indexes, uint32_t* next_index, uint32_t* outsize, int pem);
 extern inline void _UMC_get_grad(float x, float y, float z, float w, vec3 out, struct osn_context* osn);
 extern __forceinline void _UMC_Chunk_set_isov(struct UMC_Isovertex* isov, vec3** out_vertices, vec3** out_normals, uint32_t* next_vertex, uint32_t* out_size, float w, struct osn_context* osn);
 extern __forceinline void _UMC_Chunk_trilerp(float x, float y, float z, vec3* verts, vec3 out);

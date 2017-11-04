@@ -144,7 +144,9 @@
     <ClCompile Include="Hexahedron.c" />
     <ClCompile Include="MemoryPool.c" />
     <ClCompile Include="OpenSimplexNoise.c" />
-    <ClCompile Include="Sampler.c" />
+    <ClCompile Include="Sampler.c">
+      <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Release|x64'">AnySuitable</InlineFunctionExpansion>
+    </ClCompile>
     <ClCompile Include="Tetrahedron.c" />
     <ClCompile Include="THierarchy.c" />
     <ClCompile Include="UniformMarchingCubes.c" />
@@ -163,6 +165,7 @@
     <ClInclude Include="nuklear_styles.h" />
     <ClInclude Include="OpenSimplexNoise.h" />
     <ClInclude Include="Options.h" />
+    <ClInclude Include="PEMTable.txt" />
     <ClInclude Include="Sampler.h" />
     <ClInclude Include="Tetrahedron.h" />
     <ClInclude Include="TetrahedronTable.h" />

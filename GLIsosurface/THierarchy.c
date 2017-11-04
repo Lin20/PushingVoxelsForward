@@ -175,7 +175,7 @@ void THierarchy_create_outline(struct THierarchy* dest)
 	{
 		if (TetrahedronNode_add_outline(&dest->top_level[i], &verts, &inds, &v_next, &v_size, &i_next, &i_size))
 		{
-			printf("nFailed to create outline on branch %i.n", i);
+			printf("Failed to create outline on branch %i.n", i);
 			break;
 		}
 	}

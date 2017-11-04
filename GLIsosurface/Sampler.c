@@ -67,14 +67,14 @@ float SurfaceFn_Klein_bottle(float x, float y, float z, float w, struct osn_cont
 
 float SurfaceFn_2d_terrain(float x, float y, float z, float w, struct osn_context* osn_context)
 {
-	const float scale = 0.025f;
-	return y - open_simplex_noise2(osn_context, x * scale + w, z * scale) / 4.0f * Sampler_world_size;
+	const float scale = 0.005f;
+	return y - open_simplex_noise2_oct(osn_context, x * scale + w, z * scale, 8, 0.5f) * 0.2f * Sampler_world_size;
 }
 
 float SurfaceFn_3d_terrain(float x, float y, float z, float w, struct osn_context* osn_context)
 {
-	const float scale = 0.025f;
-	return y - open_simplex_noise3(osn_context, x * scale + w, y * scale, z * scale) * 0.5f * Sampler_world_size;
+	const float scale = 0.01f;
+	return y - open_simplex_noise3_oct(osn_context, x * scale + w, y * scale, z * scale, 2, 0.5f) * 0.6f * Sampler_world_size;
 }
 
 float SurfaceFn_sphere_r(float x, float y, float z, float w, struct osn_context* osn_context)
@@ -85,7 +85,7 @@ float SurfaceFn_sphere_r(float x, float y, float z, float w, struct osn_context*
 	return x * x + y * y + z * z - r;
 }
 
-__forceinline float SurfaceFn_torus_r(float x, float y, float z, float w, struct osn_context* osn_context)
+float SurfaceFn_torus_r(float x, float y, float z, float w, struct osn_context* osn_context)
 {
 	const float scale = 0.15f;
 	const float r1 = (float)Sampler_world_size / 4.0f + open_simplex_noise3(osn_context, x * scale + w, y * scale, z * scale) * 4.0f;
@@ -95,3 +95,19 @@ __forceinline float SurfaceFn_torus_r(float x, float y, float z, float w, struct
 	return len - r2;
 }
 
+float SurfaceFn_windy(float x, float y, float z, float w, struct osn_context* osn)
+{
+	float g_scale = 0.005f;
+	float ym = 2.0f;
+	const float wind_scale = 0.002f;
+	const float wind_percent = 7.8f;
+	float height = 128;
+
+	float wind_x = open_simplex_noise3_oct(osn, x * wind_scale + 1.186f, y * wind_scale + 1.186f, z * wind_scale + 1.186f, 4, 0.5f) * wind_percent;
+	float wind_y = open_simplex_noise3_oct(osn, x * wind_scale + 0.842f, y * wind_scale + 0.842f, z * wind_scale + 0.842f, 4, 0.5f) * wind_percent;
+	float wind_z = open_simplex_noise3_oct(osn, x * wind_scale + 0.357f, y * wind_scale + 0.357f, z * wind_scale + 0.357f, 4, 0.5f) * wind_percent;
+
+	float n = open_simplex_noise3_oct(osn, x * g_scale + wind_x, y * g_scale + wind_y, z * g_scale + wind_z, 4, 0.5f) * height;
+
+	return y * ym - n - 0.01f;
+}

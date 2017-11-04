@@ -10,6 +10,7 @@ struct FPSCamera
 	int last_1 : 1;
 	int last_2 : 1;
 	int last_c : 1;
+	int last_mb : 1;
 	int lock_cursor : 1;
 	float speed;
 	vec3 position;

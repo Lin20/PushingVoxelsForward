@@ -18,3 +18,4 @@ extern __forceinline float SurfaceFn_2d_terrain(float x, float y, float z, float
 extern __forceinline float SurfaceFn_3d_terrain(float x, float y, float z, float w, struct osn_context* osn_context);
 extern __forceinline float SurfaceFn_sphere_r(float x, float y, float z, float w, struct osn_context* osn_context);
 extern __forceinline float SurfaceFn_torus_r(float x, float y, float z, float w, struct osn_context* osn_context);
+extern __forceinline float SurfaceFn_windy(float x, float y, float z, float w, struct osn_context* osn);

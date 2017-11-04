@@ -11,6 +11,7 @@ void FPSCamera_init(struct FPSCamera* camera, uint32_t width, uint32_t height, G
 	camera->last_1 = 0;
 	camera->last_2 = 0;
 	camera->lock_cursor = 0;
+	camera->last_mb = 0;
 	camera->speed = 0.1f;
 	vec3_set(camera->position, 0, 0, -3);
 	vec3_set(camera->rot, 0, 0, 0);
@@ -20,7 +21,7 @@ void FPSCamera_init(struct FPSCamera* camera, uint32_t width, uint32_t height, G
 	glfwSetCursorPos(render_input->window, render_input->width * 0.5, render_input->height * 0.5);
 	glfwGetCursorPos(render_input->window, &camera->last_x, &camera->last_y);
 
-	glm_perspective(PI / 3.0f, (float)width / (float)height, 0.001f, 1000.0f, camera->projection);
+	glm_perspective(PI / 3.0f, (float)width / (float)height, 0.004f, 1000.0f, camera->projection);
 	FPSCamera_update(camera, render_input);
 	FPSCamera_set_shader(camera, shader_proj, shader_view);
 }
@@ -38,6 +39,10 @@ void FPSCamera_update(struct FPSCamera* camera, struct RenderInput* render_input
 		camera->speed *= 0.5f;
 	camera->last_1 = glfwGetKey(render_input->window, GLFW_KEY_1);
 	camera->last_2 = glfwGetKey(render_input->window, GLFW_KEY_2);
+
+	if (glfwGetMouseButton(render_input->window, GLFW_MOUSE_BUTTON_MIDDLE) && !camera->last_mb)
+		camera->lock_cursor = !camera->lock_cursor;
+	camera->last_mb = glfwGetMouseButton(render_input->window, GLFW_MOUSE_BUTTON_MIDDLE);
 
 	float speed = camera->speed;
 	float delta_smoothness = Smoothness;
