@@ -1,3 +1,5 @@
+# This project has been succeeded by [BinaryMeshFitting](https://github.com/Lin20/BinaryMeshFitting)
+
 # PushingVoxelsForward
 Isosurface extraction using largely undiscovered techniques in C and OpenGL. Check out [https://voxelspace.net/](voxelspace.net)
 
